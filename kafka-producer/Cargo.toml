@@ -1,0 +1,31 @@
+[package]
+name = "kafka-producer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tikv-jemalloc-ctl = { workspace = true }
+tikv-jemallocator = { workspace = true }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+
+tycho-light-node = { workspace = true }
+tycho-core = { workspace = true }
+tycho-block-util = { workspace = true }
+
+everscale-types = { workspace = true }
+
+serde = { workspace = true }
+
+rdkafka = { version = "0.36.2", features = ["tokio"] }
+futures-util = { workspace = true }
+
+[features]
+ssl = ["rdkafka/ssl-vendored"]
+
+[lints]
+workspace = true

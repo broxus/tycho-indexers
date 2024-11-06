@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  merge_group:
+  pull_request:
+    branches:
+      - "**"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "**.rs"
+      - ".github**"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }} # cancels previous runs on the same PR / commit group
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rustfmt:
+    name: Rustfmt
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo +nightly fmt -- --check
+
+  clippy:
+    name: Clippy
+    needs: rustfmt
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Clippy check
+        run: cargo clippy --all-targets --all-features -- -D warnings
