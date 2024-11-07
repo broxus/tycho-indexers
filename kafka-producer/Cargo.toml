@@ -24,6 +24,8 @@ serde = { workspace = true }
 rdkafka = { version = "0.36.2", features = ["tokio"] }
 futures-util = { workspace = true }
 
+ton-block-compressor = { git = "https://github.com/broxus/ton-block-compressor.git" }
+
 [features]
 ssl = ["rdkafka/ssl-vendored"]
 

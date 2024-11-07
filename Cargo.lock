@@ -1340,6 +1340,7 @@ dependencies = [
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
+ "ton-block-compressor",
  "tracing",
  "tycho-block-util",
  "tycho-core",
@@ -2783,6 +2784,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ton-block-compressor"
+version = "0.1.0"
+source = "git+https://github.com/broxus/ton-block-compressor.git#625ba4b40aeb80d04d45f72cce4835ae4fc1b560"
+dependencies = [
+ "anyhow",
+ "zstd",
+]
+
+[[package]]
 name = "tower"
 version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3159,7 +3169,7 @@ dependencies = [
  "tracing-appender",
  "tracing-stackdriver",
  "tracing-subscriber",
- "zstd-safe",
+ "zstd-safe 7.2.1",
  "zstd-sys",
 ]
 
@@ -3599,6 +3609,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.87",
+]
+
+[[package]]
+name = "zstd"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a27595e173641171fc74a1232b7b1c7a7cb6e18222c11e9dfb9888fa424c53c"
+dependencies = [
+ "zstd-safe 6.0.6",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "6.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee98ffd0b48ee95e6c5168188e44a54550b1564d9d530ee21d5f0eaed1069581"
+dependencies = [
+ "libc",
+ "zstd-sys",
 ]
 
 [[package]]

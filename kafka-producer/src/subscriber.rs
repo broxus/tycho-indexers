@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use everscale_types::boc::BocRepr;
-use everscale_types::cell::CellBuilder;
 use futures_util::future::BoxFuture;
 use futures_util::stream::FuturesOrdered;
 use futures_util::{FutureExt, StreamExt};
@@ -54,39 +53,44 @@ impl KafkaProducer {
         Ok(Self { producer, config })
     }
     async fn handle_block(&self, block_stuff: &BlockStuff) -> Result<()> {
-        let block_id = block_stuff.id();
+        let block_id = *block_stuff.id();
 
         let extra = block_stuff.load_extra()?;
         let account_blocks = extra.account_blocks.load()?;
 
-        let mut transactions = Vec::new();
-        for account_block in account_blocks.iter() {
-            let (addr, _, block) = account_block?;
-            for transaction in block.transactions.iter() {
-                let (_, _, transaction) = transaction?;
-                let hash = CellBuilder::build_from(transaction.clone())?
-                    .repr_hash()
-                    .0
-                    .to_vec();
-                let transaction = transaction.load()?;
-                let timestamp = transaction.now;
-                let data = BocRepr::encode(&transaction)?;
+        let transactions: anyhow::Result<Vec<_>> = tokio::task::spawn_blocking(move || {
+            let mut compressor = ton_block_compressor::ZstdWrapper::with_level(3);
+            let mut transactions = Vec::new();
 
-                let partition = if block_id.is_masterchain() {
-                    0
-                } else {
-                    // first 3 bits of the account id
-                    (1 + (addr[0] >> 5)) & 0b111
-                };
+            for account_block in account_blocks.iter() {
+                let (addr, _, block) = account_block?;
+                for transaction in block.transactions.iter() {
+                    let (_, _, transaction) = transaction?;
+                    let hash = transaction.inner().repr_hash().0.to_vec();
+                    let transaction = transaction.load()?;
+                    let timestamp = transaction.now;
+                    let data = BocRepr::encode(&transaction)?;
+                    let data = compressor.compress(&data)?.to_vec();
 
-                transactions.push(TransactionToKafka {
-                    hash,
-                    data,
-                    partition,
-                    timestamp,
-                });
+                    let partition = if block_id.is_masterchain() {
+                        0
+                    } else {
+                        // first 3 bits of the account id
+                        1 + (addr[0] >> 5)
+                    };
+
+                    transactions.push(TransactionToKafka {
+                        hash,
+                        data,
+                        partition,
+                        timestamp,
+                    });
+                }
             }
-        }
+            Ok(transactions)
+        })
+        .await?;
+        let transactions = transactions?;
 
         let mut futures: FuturesOrdered<_> = transactions
             .into_iter()
