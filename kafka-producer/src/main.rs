@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
 
-use crate::config::KafkaConsumerConfig;
+use crate::config::UserConfig;
 use crate::subscriber::KafkaProducer;
 
 mod config;
@@ -19,7 +19,7 @@ struct ExplorerArgs {
     node: tycho_light_node::CmdRun,
 }
 
-type Config = tycho_light_node::NodeConfig<KafkaConsumerConfig>;
+type Config = tycho_light_node::NodeConfig<UserConfig>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
 
     let config: Config =
         tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
-    let writer = KafkaProducer::new(config.user_config.clone())?;
+    let writer = KafkaProducer::new(config.user_config.kafka.clone())?;
 
     if let Some(metrics) = &config.metrics {
         init_metrics(metrics.listen_addr)?;

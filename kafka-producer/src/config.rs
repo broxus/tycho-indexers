@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct UserConfig {
+    pub kafka: KafkaConsumerConfig,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct KafkaConsumerConfig {
@@ -39,7 +44,7 @@ fn default_session_timeout_ms() -> u32 {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[serde(tag = "security_protocol")]
+#[serde(tag = "kind")]
 pub enum SecurityConfig {
     #[cfg(feature = "ssl")]
     Ssl(SslConfig),
