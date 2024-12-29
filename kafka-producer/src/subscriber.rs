@@ -30,6 +30,18 @@ impl KafkaProducer {
             client_config.set("message.max.bytes", message_max_size.to_string());
         }
 
+        // we are sending batches
+        client_config.set("linger.ms", "0");
+
+        const MAX_MESSAGES: i32 = 25_000;
+        // 25k messages per batch
+        client_config.set("batch.size", (MAX_MESSAGES * 1024).to_string());
+        client_config.set("batch.num.messages", (MAX_MESSAGES).to_string());
+
+        // since data is already compressed
+        client_config.set("compression.type", "none");
+        client_config.set("acks", "1");
+
         #[cfg(feature = "ssl")]
         match &config.security_config {
             #[cfg(feature = "ssl")]
@@ -96,7 +108,7 @@ impl KafkaProducer {
 
             let transactions = transactions
                 .into_par_iter()
-                .chunks(1024)
+                .chunks(100)
                 .map(|tx| {
                     let mut compressor = ton_block_compressor::ZstdWrapper::new();
 
