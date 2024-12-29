@@ -2,9 +2,11 @@ use std::time::Duration;
 
 use anyhow::Result;
 use everscale_types::boc::BocRepr;
+use everscale_types::models::Transaction;
 use futures_util::future::BoxFuture;
 use futures_util::stream::FuturesOrdered;
 use futures_util::{FutureExt, StreamExt};
+use rayon::prelude::*;
 use rdkafka::producer::FutureRecord;
 use tycho_block_util::block::BlockStuff;
 use tycho_core::block_strider::{StateSubscriber, StateSubscriberContext};
@@ -58,8 +60,14 @@ impl KafkaProducer {
         let extra = block_stuff.load_extra()?;
         let account_blocks = extra.account_blocks.load()?;
 
-        let transactions: anyhow::Result<Vec<_>> = tokio::task::spawn_blocking(move || {
-            let mut compressor = ton_block_compressor::ZstdWrapper::with_level(3);
+        struct TempTransaction {
+            hash: Vec<u8>,
+            transaction: Transaction,
+            partition: u8,
+            timestamp: u32,
+        }
+
+        let transactions: anyhow::Result<Vec<Vec<_>>> = tokio::task::spawn_blocking(move || {
             let mut transactions = Vec::new();
 
             for account_block in account_blocks.iter() {
@@ -69,8 +77,6 @@ impl KafkaProducer {
                     let hash = transaction.inner().repr_hash().0.to_vec();
                     let transaction = transaction.load()?;
                     let timestamp = transaction.now;
-                    let data = BocRepr::encode(&transaction)?;
-                    let data = compressor.compress(&data)?.to_vec();
 
                     let partition = if block_id.is_masterchain() {
                         0
@@ -79,14 +85,35 @@ impl KafkaProducer {
                         1 + (addr[0] >> 5)
                     };
 
-                    transactions.push(TransactionToKafka {
+                    transactions.push(TempTransaction {
                         hash,
-                        data,
+                        transaction,
                         partition,
                         timestamp,
                     });
                 }
             }
+
+            let transactions = transactions
+                .into_par_iter()
+                .chunks(1024)
+                .map(|tx| {
+                    let mut compressor = ton_block_compressor::ZstdWrapper::new();
+
+                    let mut res = Vec::with_capacity(tx.len());
+                    for tx in tx {
+                        let data = BocRepr::encode(&tx.transaction).unwrap();
+                        let data = compressor.compress(&data).unwrap();
+                        res.push(TransactionToKafka {
+                            hash: tx.hash,
+                            data: data.to_vec(),
+                            partition: tx.partition,
+                            timestamp: tx.timestamp,
+                        });
+                    }
+                    res
+                })
+                .collect::<Vec<_>>();
             Ok(transactions)
         })
         .await?;
@@ -94,6 +121,7 @@ impl KafkaProducer {
 
         let mut futures: FuturesOrdered<_> = transactions
             .into_iter()
+            .flatten()
             .map(move |tx| self.send_with_retry(tx))
             .collect();
 

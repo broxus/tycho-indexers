@@ -1,6 +1,6 @@
 [package]
 name = "kafka-producer"
-version = "0.1.2+tychov-3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.3+tychov-1f55302922baae6208fb6715650251795972d189"
 edition = "2021"
 
 [dependencies]
@@ -18,6 +18,8 @@ tycho-core = { workspace = true }
 tycho-block-util = { workspace = true }
 
 everscale-types = { workspace = true }
+
+rayon = { workspace = true }
 
 serde = { workspace = true }
 

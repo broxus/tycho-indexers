@@ -11,20 +11,24 @@ everscale-types = { version = "0.1.1", features = ["tycho"] }
 tokio = { version = "1.41.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
-tikv-jemalloc-ctl = "0.5.0"
-tikv-jemallocator = { version = "0.5.0", features = ["unprefixed_malloc_on_supported_platforms", "background_threads", "stats"] }
+tikv-jemalloc-ctl = { version = "0.6.0", features = ["stats"] }
+tikv-jemallocator = { version = "0.6.0", features = ["unprefixed_malloc_on_supported_platforms", "background_threads", "stats"] }
 metrics = "0.23.0"
 metrics-exporter-prometheus = "0.15.0"
 
-tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e" }
-tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e" }
-tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e" }
-tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e" }
+tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "1f55302922baae6208fb6715650251795972d189" }
+tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "1f55302922baae6208fb6715650251795972d189" }
+tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "1f55302922baae6208fb6715650251795972d189" }
+tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "1f55302922baae6208fb6715650251795972d189" }
 
+rayon = "1.10.0"
 serde = { version = "1.0.214", features = ["derive"] }
 serde_json = "1.0.132"
 
 futures-util = "0.3.31"
+
+[patch.crates-io]
+weedb = { version = "0.3.8", git = "https://github.com/broxus/weedb.git", rev = "59728ea0c8703dd28a4c37dee05c1321cd81b966" }
 
 [workspace.lints.rust]
 future_incompatible = "warn"

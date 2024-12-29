@@ -1338,7 +1338,7 @@ dependencies = [
 
 [[package]]
 name = "kafka-producer"
-version = "0.1.2+tychov-3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.3+tychov-1f55302922baae6208fb6715650251795972d189"
 dependencies = [
  "anyhow",
  "clap",
@@ -1346,6 +1346,7 @@ dependencies = [
  "futures-util",
  "metrics",
  "metrics-exporter-prometheus",
+ "rayon",
  "rdkafka",
  "serde",
  "tikv-jemalloc-ctl",
@@ -1388,9 +1389,8 @@ dependencies = [
 
 [[package]]
 name = "librocksdb-sys"
-version = "0.16.0+8.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce3d60bc059831dc1c83903fb45c103f75db65c5a7bf22272764d9cc683e348c"
+version = "0.17.1+9.7.4"
+source = "git+https://github.com/rust-rocksdb/rust-rocksdb.git?rev=b2dab4a0915eed72741657f783118d9220d4f070#b2dab4a0915eed72741657f783118d9220d4f070"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -2144,8 +2144,7 @@ dependencies = [
 [[package]]
 name = "rocksdb"
 version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bd13e55d6d7b8cd0ea569161127567cd587676c99f4472f779a0279aa60a7a7"
+source = "git+https://github.com/rust-rocksdb/rust-rocksdb.git?rev=b2dab4a0915eed72741657f783118d9220d4f070#b2dab4a0915eed72741657f783118d9220d4f070"
 dependencies = [
  "libc",
  "librocksdb-sys",
@@ -2595,9 +2594,9 @@ dependencies = [
 
 [[package]]
 name = "tikv-jemalloc-ctl"
-version = "0.5.4"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "619bfed27d807b54f7f776b9430d4f8060e66ee138a28632ca898584d462c31c"
+checksum = "f21f216790c8df74ce3ab25b534e0718da5a1916719771d3fec23315c99e468b"
 dependencies = [
  "libc",
  "paste",
@@ -2606,9 +2605,9 @@ dependencies = [
 
 [[package]]
 name = "tikv-jemalloc-sys"
-version = "0.5.4+5.3.0-patched"
+version = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9402443cb8fd499b6f327e40565234ff34dbda27460c5b47db0db77443dd85d1"
+checksum = "cd3c60906412afa9c2b5b5a48ca6a5abe5736aec9eb48ad05037a677e52e4e2d"
 dependencies = [
  "cc",
  "libc",
@@ -2616,9 +2615,9 @@ dependencies = [
 
 [[package]]
 name = "tikv-jemallocator"
-version = "0.5.4"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
+checksum = "4cec5ff18518d81584f477e9bfdf957f5bb0979b0bac3af4ca30b5b3ae2d2865"
 dependencies = [
  "libc",
  "tikv-jemalloc-sys",
@@ -2964,8 +2963,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tycho-block-util"
-version = "0.1.4"
-source = "git+https://github.com/broxus/tycho.git?rev=3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e#3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.5"
+source = "git+https://github.com/broxus/tycho.git?rev=1f55302922baae6208fb6715650251795972d189#1f55302922baae6208fb6715650251795972d189"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2980,8 +2979,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-core"
-version = "0.1.4"
-source = "git+https://github.com/broxus/tycho.git?rev=3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e#3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.5"
+source = "git+https://github.com/broxus/tycho.git?rev=1f55302922baae6208fb6715650251795972d189#1f55302922baae6208fb6715650251795972d189"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3009,8 +3008,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-light-node"
-version = "0.1.4"
-source = "git+https://github.com/broxus/tycho.git?rev=3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e#3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.5"
+source = "git+https://github.com/broxus/tycho.git?rev=1f55302922baae6208fb6715650251795972d189#1f55302922baae6208fb6715650251795972d189"
 dependencies = [
  "anyhow",
  "clap",
@@ -3031,8 +3030,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-network"
-version = "0.1.4"
-source = "git+https://github.com/broxus/tycho.git?rev=3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e#3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.5"
+source = "git+https://github.com/broxus/tycho.git?rev=1f55302922baae6208fb6715650251795972d189#1f55302922baae6208fb6715650251795972d189"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3070,8 +3069,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-rpc"
-version = "0.1.4"
-source = "git+https://github.com/broxus/tycho.git?rev=3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e#3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.5"
+source = "git+https://github.com/broxus/tycho.git?rev=1f55302922baae6208fb6715650251795972d189#1f55302922baae6208fb6715650251795972d189"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3098,8 +3097,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-storage"
-version = "0.1.4"
-source = "git+https://github.com/broxus/tycho.git?rev=3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e#3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.5"
+source = "git+https://github.com/broxus/tycho.git?rev=1f55302922baae6208fb6715650251795972d189#1f55302922baae6208fb6715650251795972d189"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3139,8 +3138,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-util"
-version = "0.1.4"
-source = "git+https://github.com/broxus/tycho.git?rev=3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e#3f0bf7571d0dd0e488fc2e5507fc4a9b7651770e"
+version = "0.1.5"
+source = "git+https://github.com/broxus/tycho.git?rev=1f55302922baae6208fb6715650251795972d189#1f55302922baae6208fb6715650251795972d189"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3357,8 +3356,7 @@ dependencies = [
 [[package]]
 name = "weedb"
 version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c65a1543619bd05013dfe6092797d2c3b16aa7b41862d588735ff7def453ce04"
+source = "git+https://github.com/broxus/weedb.git?rev=59728ea0c8703dd28a4c37dee05c1321cd81b966#59728ea0c8703dd28a4c37dee05c1321cd81b966"
 dependencies = [
  "librocksdb-sys",
  "metrics",
