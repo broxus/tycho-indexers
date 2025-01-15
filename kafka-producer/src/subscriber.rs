@@ -181,3 +181,27 @@ impl StateSubscriber for KafkaProducer {
         .boxed()
     }
 }
+
+#[expect(clippy::large_enum_variant, reason = "doesn't matter")]
+pub enum OptionalStateSubscriber {
+    KafkaProducer(KafkaProducer),
+    Blackhole,
+}
+
+impl StateSubscriber for OptionalStateSubscriber {
+    type HandleStateFut<'a> = futures_util::future::Either<
+        <KafkaProducer as StateSubscriber>::HandleStateFut<'a>,
+        futures_util::future::Ready<Result<()>>,
+    >;
+
+    fn handle_state<'a>(&'a self, cx: &'a StateSubscriberContext) -> Self::HandleStateFut<'a> {
+        match self {
+            OptionalStateSubscriber::KafkaProducer(producer) => {
+                futures_util::future::Either::Left(producer.handle_block(&cx.block).boxed())
+            }
+            OptionalStateSubscriber::Blackhole => {
+                futures_util::future::Either::Right(futures_util::future::ok(()))
+            }
+        }
+    }
+}

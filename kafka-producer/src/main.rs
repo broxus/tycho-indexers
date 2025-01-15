@@ -5,7 +5,7 @@ use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
 
 use crate::config::UserConfig;
-use crate::subscriber::KafkaProducer;
+use crate::subscriber::{KafkaProducer, OptionalStateSubscriber};
 
 mod config;
 mod subscriber;
@@ -37,7 +37,17 @@ async fn main() -> anyhow::Result<()> {
 
     let config: Config =
         tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
-    let writer = KafkaProducer::new(config.user_config.kafka.clone())?;
+    let writer = match &config.user_config.kafka {
+        None => {
+            tracing::warn!("Starting without kafka producer");
+            OptionalStateSubscriber::Blackhole
+        }
+        Some(c) => {
+            let producer =
+                KafkaProducer::new(c.clone()).context("failed to create kafka subsbriber")?;
+            OptionalStateSubscriber::KafkaProducer(producer)
+        }
+    };
 
     if let Some(metrics) = &config.metrics {
         init_metrics(metrics.listen_addr)?;

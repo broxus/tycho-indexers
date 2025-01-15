@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct UserConfig {
-    pub kafka: KafkaConsumerConfig,
+    pub kafka: Option<KafkaConsumerConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
