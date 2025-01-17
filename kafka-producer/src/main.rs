@@ -1,6 +1,8 @@
 use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
+use tycho_block_util::state::MinRefMcStateTracker;
+use tycho_core::block_strider::{PsSubscriber, ShardStateApplier};
 
 use crate::config::UserConfig;
 use crate::subscriber::{KafkaProducer, OptionalStateSubscriber};
@@ -35,6 +37,9 @@ async fn main() -> anyhow::Result<()> {
 
     let config: Config =
         tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
+
+    let import_zerostate = args.node.import_zerostate.clone();
+
     let writer = match &config.user_config.kafka {
         None => {
             tracing::warn!("Starting without kafka producer");
