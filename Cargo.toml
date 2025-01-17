@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["kafka-producer"]
+members = [
+    "archives-node",
+    "kafka-producer",
+]
 
 [workspace.dependencies]
 anyhow = "1.0.93"
