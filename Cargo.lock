@@ -112,6 +112,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
+name = "archives-node"
+version = "0.1.0+tychov-fb8d780878f6e1f2524c63daa0a9f41bc008a10b"
+dependencies = [
+ "anyhow",
+ "clap",
+ "everscale-types",
+ "futures-util",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "rayon",
+ "serde",
+ "tikv-jemalloc-ctl",
+ "tikv-jemallocator",
+ "tokio",
+ "tracing",
+ "tycho-block-util",
+ "tycho-core",
+ "tycho-light-node",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -2,10 +2,10 @@ use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
 use tycho_block_util::state::MinRefMcStateTracker;
-use tycho_core::block_strider::{PsSubscriber, ShardStateApplier};
+use tycho_core::block_strider::{ArchiveHandler, PsSubscriber, ShardStateApplier};
 
 use crate::config::UserConfig;
-use crate::subscriber::{KafkaProducer, OptionalStateSubscriber};
+use crate::subscriber::{ArchiveUploader, OptionalArchiveSubscriber};
 
 mod config;
 mod subscriber;
@@ -40,16 +40,15 @@ async fn main() -> anyhow::Result<()> {
 
     let import_zerostate = args.node.import_zerostate.clone();
 
-    let writer = match &config.user_config.kafka {
+    let uploader = match &config.user_config.s3_uploader {
         None => {
-            tracing::warn!("Starting without kafka producer");
-            OptionalStateSubscriber::Blackhole
+            tracing::warn!("Starting without archive uploader");
+            OptionalArchiveSubscriber::BlackHole
         }
         Some(c) => {
-            let producer = KafkaProducer::new(c.clone())
-                .await
-                .context("failed to create kafka subscriber")?;
-            OptionalStateSubscriber::KafkaProducer(producer)
+            let uploader =
+                ArchiveUploader::new(c.clone()).context("failed to create archive uploader")?;
+            OptionalArchiveSubscriber::ArchiveUploader(uploader)
         }
     };
 
@@ -76,11 +75,15 @@ async fn main() -> anyhow::Result<()> {
         ShardStateApplier::new(
             state_tracker.clone(),
             storage.clone(),
-            (rpc_state.1, writer, ps_subscriber),
+            (rpc_state.1, ps_subscriber),
         )
     };
 
-    node.run((state_applier, rpc_state.0)).await?;
+    let storage = node.storage();
+    let archive_uploader = ArchiveHandler::new(storage.clone(), uploader)?;
+
+    node.run((state_applier, archive_uploader, rpc_state.0))
+        .await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }

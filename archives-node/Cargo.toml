@@ -1,0 +1,29 @@
+[package]
+name = "archives-node"
+version = "0.1.0+tychov-fb8d780878f6e1f2524c63daa0a9f41bc008a10b"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tikv-jemalloc-ctl = { workspace = true }
+tikv-jemallocator = { workspace = true }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+
+tycho-light-node = { workspace = true }
+tycho-core = { workspace = true }
+tycho-block-util = { workspace = true }
+
+everscale-types = { workspace = true }
+
+rayon = { workspace = true }
+
+serde = { workspace = true }
+
+futures-util = { workspace = true }
+
+[lints]
+workspace = true
