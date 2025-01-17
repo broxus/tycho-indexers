@@ -1,6 +1,8 @@
 use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
+use tycho_block_util::state::MinRefMcStateTracker;
+use tycho_core::block_strider::{PsSubscriber, ShardStateApplier};
 
 use crate::config::UserConfig;
 use crate::subscriber::{KafkaProducer, OptionalStateSubscriber};
@@ -35,6 +37,9 @@ async fn main() -> anyhow::Result<()> {
 
     let config: Config =
         tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
+
+    let import_zerostate = args.node.import_zerostate.clone();
+
     let writer = match &config.user_config.kafka {
         None => {
             tracing::warn!("Starting without kafka producer");
@@ -52,7 +57,29 @@ async fn main() -> anyhow::Result<()> {
     }
     spawn_allocator_metrics_loop();
 
-    args.node.run(config, writer).await?;
+    let mut node = args.node.create(config).await?;
+    let init_block_id = node.init(import_zerostate).await?;
+
+    let rpc_state = node
+        .create_rpc(&init_block_id)
+        .await?
+        .map(|x| x.split())
+        .unzip();
+
+    let state_aplier = {
+        let storage = node.storage();
+
+        let ps_subscriber = PsSubscriber::new(storage.clone());
+        let state_tracker = MinRefMcStateTracker::default();
+
+        ShardStateApplier::new(
+            state_tracker.clone(),
+            storage.clone(),
+            (rpc_state.1, writer, ps_subscriber),
+        )
+    };
+
+    node.run((state_aplier, rpc_state.0)).await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }
