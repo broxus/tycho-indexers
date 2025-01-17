@@ -41,8 +41,9 @@ async fn main() -> anyhow::Result<()> {
             OptionalStateSubscriber::Blackhole
         }
         Some(c) => {
-            let producer =
-                KafkaProducer::new(c.clone()).context("failed to create kafka subsbriber")?;
+            let producer = KafkaProducer::new(c.clone())
+                .await
+                .context("failed to create kafka subscriber")?;
             OptionalStateSubscriber::KafkaProducer(producer)
         }
     };

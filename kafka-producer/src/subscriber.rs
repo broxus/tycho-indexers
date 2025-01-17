@@ -1,13 +1,13 @@
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use everscale_types::boc::BocRepr;
 use everscale_types::models::Transaction;
 use futures_util::future::BoxFuture;
 use futures_util::stream::FuturesOrdered;
 use futures_util::{FutureExt, StreamExt};
 use rayon::prelude::*;
-use rdkafka::producer::FutureRecord;
+use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use tycho_block_util::block::BlockStuff;
 use tycho_core::block_strider::{StateSubscriber, StateSubscriberContext};
 
@@ -19,7 +19,7 @@ pub struct KafkaProducer {
 }
 
 impl KafkaProducer {
-    pub fn new(config: KafkaConsumerConfig) -> Result<Self> {
+    pub async fn new(config: KafkaConsumerConfig) -> Result<Self> {
         let mut client_config = rdkafka::config::ClientConfig::new();
         client_config.set("bootstrap.servers", &config.brokers);
 
@@ -62,10 +62,17 @@ impl KafkaProducer {
             None => {}
         }
 
-        let producer = client_config.create()?;
+        let producer: FutureProducer = client_config.create()?;
+        let client = producer.client();
+
+        client
+            .fetch_metadata(Some(&config.topic), Duration::from_secs(10))
+            .context("Failed to fetch metadata. Are kafka brokers available?")?;
+        tracing::info!("Connected to kafka");
 
         Ok(Self { producer, config })
     }
+
     async fn handle_block(&self, block_stuff: &BlockStuff) -> Result<()> {
         let block_id = *block_stuff.id();
 
