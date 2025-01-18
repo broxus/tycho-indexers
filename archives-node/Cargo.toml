@@ -1,11 +1,13 @@
 [package]
 name = "archives-node"
-version = "0.1.0+tychov-fb8d780878f6e1f2524c63daa0a9f41bc008a10b"
+version = "0.1.5+tychov-e535d5c45b69b29711180a0f33f237194ccfe987"
 edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+hex = { workspace = true }
+object_store = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tikv-jemalloc-ctl = { workspace = true }
@@ -16,6 +18,7 @@ metrics-exporter-prometheus = { workspace = true }
 tycho-light-node = { workspace = true }
 tycho-core = { workspace = true }
 tycho-block-util = { workspace = true }
+tycho-util = { workspace = true }
 
 everscale-types = { workspace = true }
 
