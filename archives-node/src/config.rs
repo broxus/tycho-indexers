@@ -8,9 +8,17 @@ pub struct UserConfig {
     pub s3_uploader: Option<ArchiveUploaderConfig>,
 }
 
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArchiveUploaderConfig {
+    /// S3 bucket name.
+    ///
+    /// Default: 'archives'.
+    pub bucket_name: String,
+
+    /// S3 credentials.
+    ///
+    /// Default: 'credentials.json'
     pub credentials_path: String,
 
     /// Default: 1 seconds.
@@ -21,7 +29,8 @@ pub struct ArchiveUploaderConfig {
 impl Default for ArchiveUploaderConfig {
     fn default() -> Self {
         Self {
-            credentials_path: Default::default(),
+            bucket_name: "archives".to_owned(),
+            credentials_path: "credentials.json".to_owned(),
             retry_delay: Duration::from_secs(1),
         }
     }
