@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use bytesize::ByteSize;
 use serde::{Deserialize, Serialize};
 use tycho_util::serde_helpers;
 
@@ -14,26 +15,51 @@ pub struct ArchiveUploaderConfig {
     /// S3 bucket name.
     ///
     /// Default: 'archives'.
+    #[serde(default = "default_bucket_name")]
     pub bucket_name: String,
 
     /// S3 provider.
     ///
     /// Default: GCS
+    #[serde(default)]
     pub provider: S3Provider,
 
+    /// Timeout to retry upload.
+    ///
     /// Default: 1 seconds.
-    #[serde(with = "serde_helpers::humantime")]
+    #[serde(default = "default_retry_delay", with = "serde_helpers::humantime")]
     pub retry_delay: Duration,
+
+    /// Upload chunk size.
+    ///
+    /// Default: 10 MB.
+    #[serde(default = "default_chunk_size")]
+    pub chunk_size: ByteSize,
+
+    /// Max concurrency uploading tasks.
+    #[serde(default = "default_max_concurrency")]
+    pub max_concurrency: usize,
 }
 
-impl Default for ArchiveUploaderConfig {
-    fn default() -> Self {
-        Self {
-            provider: Default::default(),
-            bucket_name: "archives".to_owned(),
-            retry_delay: Duration::from_secs(1),
-        }
-    }
+fn default_bucket_name() -> String {
+    "archives".to_owned()
+}
+
+fn default_retry_delay() -> Duration {
+    Duration::from_secs(1)
+}
+
+fn default_chunk_size() -> ByteSize {
+    ByteSize::mb(10)
+}
+
+fn default_max_concurrency() -> usize {
+    std::cmp::min(
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(8),
+        16, // Reasonable upper limit
+    )
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

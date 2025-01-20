@@ -131,6 +131,7 @@ name = "archives-node"
 version = "0.1.5+tychov-b118006b19e715ab7c8c91c1e96126a030ac6d19"
 dependencies = [
  "anyhow",
+ "bytesize",
  "clap",
  "futures-util",
  "humantime",
