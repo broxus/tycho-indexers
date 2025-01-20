@@ -3,35 +3,53 @@ use std::sync::Arc;
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use futures_util::FutureExt;
-use object_store::gcp::{GoogleCloudStorage, GoogleCloudStorageBuilder};
+use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
-use object_store::{ObjectStore, WriteMultipart};
+use object_store::{DynObjectStore, ObjectStore, WriteMultipart};
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 use tycho_core::block_strider::{ArchiveSubscriber, ArchiveSubscriberContext};
 use tycho_util::metrics::HistogramGuard;
 use tycho_util::sync::CancellationFlag;
 
-use crate::config::ArchiveUploaderConfig;
+use crate::config::{ArchiveUploaderConfig, S3Provider};
 
 pub struct ArchiveUploader {
-    gcs: Arc<GoogleCloudStorage>,
     config: ArchiveUploaderConfig,
+    s3_storage: Arc<DynObjectStore>,
     prev_archive_upload: tokio::sync::Mutex<Option<UploadArchiveTask>>,
 }
 
 impl ArchiveUploader {
     pub fn new(config: ArchiveUploaderConfig) -> Result<Self> {
-        let gcs = Arc::new(
-            GoogleCloudStorageBuilder::new()
-                .with_bucket_name(&config.bucket_name)
-                .with_application_credentials(&config.credentials_path)
-                .build()?,
-        );
+        let s3_storage: Arc<DynObjectStore> = match &config.provider {
+            S3Provider::Aws {
+                endpoint,
+                access_key_id,
+                secret_access_key,
+                allow_http,
+            } => Arc::new(
+                object_store::aws::AmazonS3Builder::new()
+                    .with_bucket_name(&config.bucket_name)
+                    .with_endpoint(endpoint)
+                    .with_access_key_id(access_key_id)
+                    .with_secret_access_key(secret_access_key)
+                    .with_client_options(
+                        object_store::ClientOptions::new().with_allow_http(*allow_http),
+                    )
+                    .build()?,
+            ),
+            S3Provider::Gcs { credentials_path } => Arc::new(
+                GoogleCloudStorageBuilder::new()
+                    .with_bucket_name(&config.bucket_name)
+                    .with_application_credentials(credentials_path)
+                    .build()?,
+            ),
+        };
 
         Ok(ArchiveUploader {
-            gcs,
             config,
+            s3_storage,
             prev_archive_upload: Default::default(),
         })
     }
@@ -53,11 +71,12 @@ impl ArchiveUploader {
         let cancelled = CancellationFlag::new();
 
         let handle = tokio::task::spawn({
-            let gcs = self.gcs.clone();
             let archive_id = cx.archive_id;
             let storage = cx.storage.clone();
             let location = cx.archive_id.to_string();
+
             let retry_delay = self.config.retry_delay;
+            let s3_storage = self.s3_storage.clone();
 
             let cancelled = cancelled.clone();
 
@@ -75,7 +94,10 @@ impl ArchiveUploader {
                 loop {
                     attempts += 1;
 
-                    let upload = match gcs.put_multipart(&Path::from(location.clone())).await {
+                    let upload = match s3_storage
+                        .put_multipart(&Path::from(location.clone()))
+                        .await
+                    {
                         Ok(upload) => upload,
                         Err(e) => {
                             tracing::error!(attempts, "failed to put multipart: {e}");
