@@ -76,6 +76,8 @@ impl ArchiveUploader {
             let location = cx.archive_id.to_string();
 
             let retry_delay = self.config.retry_delay;
+            let chunk_size = self.config.chunk_size.as_u64() as _;
+            let max_concurrency = self.config.max_concurrency;
             let s3_storage = self.s3_storage.clone();
 
             let cancelled = cancelled.clone();
@@ -106,9 +108,11 @@ impl ArchiveUploader {
                         }
                     };
 
-                    let mut writer = WriteMultipart::new(upload);
+                    let mut writer = WriteMultipart::new_with_chunk_size(upload, chunk_size);
                     for (_, chunk) in storage.block_storage().archive_chunks_iterator(archive_id) {
                         anyhow::ensure!(!cancelled.check(), "task aborted");
+
+                        writer.wait_for_capacity(max_concurrency).await?;
                         writer.write(&chunk);
                     }
 
