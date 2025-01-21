@@ -4,6 +4,8 @@ version = "0.1.5+tychov-b118006b19e715ab7c8c91c1e96126a030ac6d19"
 edition = "2021"
 
 [dependencies]
+md5 = { workspace = true }
+hex = { workspace = true }
 anyhow = { workspace = true }
 bytesize = { workspace = true }
 clap = { workspace = true }

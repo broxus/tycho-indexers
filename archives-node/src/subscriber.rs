@@ -97,9 +97,10 @@ impl ArchiveUploader {
 
                 let mut attempts = 0;
 
-                // Block until we successfully upload
+                // Block the strider until we successfully upload
                 loop {
                     attempts += 1;
+                    tracing::debug!(attempt = attempts, "starting upload archive");
 
                     let upload = match s3_storage
                         .put_multipart(&Path::from(location.clone()))
@@ -107,24 +108,54 @@ impl ArchiveUploader {
                     {
                         Ok(upload) => upload,
                         Err(e) => {
-                            tracing::error!(attempts, "failed to put multipart: {e}");
+                            tracing::error!(attempts, "failed to initialize multipart upload: {e}");
                             tokio::time::sleep(retry_delay).await;
                             continue;
                         }
                     };
 
+                    // Buffer for MD5 hashes for all chunks
+                    let mut md5_buffer = vec![];
+
                     let mut writer = WriteMultipart::new_with_chunk_size(upload, chunk_size);
                     for (_, chunk) in storage.block_storage().archive_chunks_iterator(archive_id) {
                         anyhow::ensure!(!cancelled.check(), "task aborted");
 
-                        writer.wait_for_capacity(max_concurrency).await?;
+                        if let Err(e) = writer.wait_for_capacity(max_concurrency).await {
+                            tracing::error!(attempts, "failed to acquire upload capacity: {e}");
+                            tokio::time::sleep(retry_delay).await;
+
+                            continue;
+                        }
+
+                        // Write chunk
                         writer.write(&chunk);
+
+                        // Calculate MD5 chunk
+                        md5_buffer.extend_from_slice(md5::compute(&chunk).as_slice());
                     }
 
                     match writer.finish().await {
-                        Ok(_) => break,
+                        Ok(result) => {
+                            let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
+
+                            if result.e_tag.as_deref().is_some_and(|tag| {
+                                tag.trim_matches('"').starts_with(&expected_etag)
+                            }) {
+                                tracing::info!("upload archive completed successfully");
+                                break;
+                            }
+
+                            tracing::error!(
+                                attempt = attempts,
+                                expected = expected_etag,
+                                received = ?result.e_tag,
+                                "ETag mismatch detected"
+                            );
+                            tokio::time::sleep(retry_delay).await;
+                        }
                         Err(e) => {
-                            tracing::error!(attempts, "failed to upload archive: {e}");
+                            tracing::error!(attempts, "failed to complete upload archive: {e}");
                             tokio::time::sleep(retry_delay).await;
                         }
                     }
