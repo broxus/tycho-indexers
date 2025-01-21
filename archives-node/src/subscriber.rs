@@ -41,6 +41,11 @@ impl ArchiveUploader {
             ),
             S3Provider::Gcs { credentials_path } => Arc::new(
                 GoogleCloudStorageBuilder::new()
+                    .with_client_options(
+                        object_store::ClientOptions::new()
+                            .with_connect_timeout_disabled()
+                            .with_timeout_disabled(),
+                    )
                     .with_bucket_name(&config.bucket_name)
                     .with_application_credentials(credentials_path)
                     .build()?,
@@ -92,7 +97,7 @@ impl ArchiveUploader {
 
                 let mut attempts = 0;
 
-                // Try to load until we load without retry limit
+                // Block until we successfully upload
                 loop {
                     attempts += 1;
 
@@ -211,7 +216,7 @@ impl UploadArchiveTask {
             {
                 tracing::error!(
                     archive_id = self.archive_id,
-                    "failed to commit archive: {e:?}"
+                    "failed to upload archive: {e:?}"
                 );
             }
 

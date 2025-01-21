@@ -82,6 +82,8 @@ async fn main() -> anyhow::Result<()> {
     let storage = node.storage();
     let archive_uploader = ArchiveHandler::new(storage.clone(), uploader)?;
 
+    // TODO: Finish not uploaded archives
+
     node.run((state_applier, archive_uploader, rpc_state.0))
         .await?;
 
