@@ -1,8 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "kafka-producer",
-]
+members = ["kafka-producer"]
 
 [workspace.dependencies]
 anyhow = "1.0.93"
@@ -12,14 +10,18 @@ tokio = { version = "1.41.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 tikv-jemalloc-ctl = { version = "0.6.0", features = ["stats"] }
-tikv-jemallocator = { version = "0.6.0", features = ["unprefixed_malloc_on_supported_platforms", "background_threads", "stats"] }
+tikv-jemallocator = { version = "0.6.0", features = [
+    "unprefixed_malloc_on_supported_platforms",
+    "background_threads",
+    "stats",
+] }
 metrics = "0.23.0"
 metrics-exporter-prometheus = "0.15.0"
 
-tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "76a2fff92ae4b0e61375df7ba0f1bad8d74d061a" }
-tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "76a2fff92ae4b0e61375df7ba0f1bad8d74d061a" }
-tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "76a2fff92ae4b0e61375df7ba0f1bad8d74d061a" }
-tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "76a2fff92ae4b0e61375df7ba0f1bad8d74d061a" }
+tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f" }
+tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f" }
+tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f" }
+tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f" }
 
 rayon = "1.10.0"
 serde = { version = "1.0.214", features = ["derive"] }
@@ -28,8 +30,7 @@ serde_json = "1.0.132"
 futures-util = "0.3.31"
 
 [patch.crates-io]
-weedb = { version = "0.3.8", git = "https://github.com/broxus/weedb.git", rev = "59728ea0c8703dd28a4c37dee05c1321cd81b966" }
-everscale-types = { git = "https://github.com/broxus/everscale-types.git", rev = "ca2b6cfe1c35c3d934a648fa836fe46ac5369138" }
+everscale-types = { git = "https://github.com/broxus/everscale-types.git", rev = "416fc7512a656d1fa51e15fc91747a211105cb13" }
 
 [profile.release]
 lto = true
