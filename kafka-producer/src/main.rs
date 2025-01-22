@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
     }
     spawn_allocator_metrics_loop();
 
-    args.node.run(config, writer).await?;
+    let _node = args.node.run(config, writer).await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }
