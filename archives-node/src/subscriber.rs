@@ -120,6 +120,20 @@ impl ArchiveUploader {
                     tracing::warn!("cancelled");
                 });
 
+                // Check archive existence before upload
+                match s3_storage.head(&Path::from(location.clone())).await {
+                    Ok(meta) => {
+                        tracing::info!(?meta, "archive already exists, skipping upload");
+                        return Ok(());
+                    }
+                    Err(object_store::Error::NotFound { path, .. }) => {
+                        tracing::info!(path, "archive not found, starting upload");
+                    }
+                    Err(e) => {
+                        tracing::error!("error checking archive existence: {e}, starting upload");
+                    }
+                }
+
                 let mut attempts = 0;
 
                 // Block the strider until we successfully upload
