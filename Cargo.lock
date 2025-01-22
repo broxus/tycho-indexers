@@ -148,6 +148,7 @@ dependencies = [
  "tycho-block-util",
  "tycho-core",
  "tycho-light-node",
+ "tycho-storage",
  "tycho-util",
 ]
 
@@ -1496,13 +1497,13 @@ dependencies = [
 
 [[package]]
 name = "librocksdb-sys"
-version = "0.17.1+9.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b7869a512ae9982f4d46ba482c2a304f1efd80c6412a3d4bf57bb79a619679f"
+version = "0.17.1+9.7.4"
+source = "git+https://github.com/rust-rocksdb/rust-rocksdb.git?rev=b2dab4a0915eed72741657f783118d9220d4f070#b2dab4a0915eed72741657f783118d9220d4f070"
 dependencies = [
  "bindgen",
  "bzip2-sys",
  "cc",
+ "glob",
  "libc",
  "libz-sys",
  "lz4-sys",
@@ -2374,9 +2375,8 @@ dependencies = [
 
 [[package]]
 name = "rocksdb"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26ec73b20525cb235bad420f911473b69f9fe27cc856c5461bccd7e4af037f43"
+version = "0.22.0"
+source = "git+https://github.com/rust-rocksdb/rust-rocksdb.git?rev=b2dab4a0915eed72741657f783118d9220d4f070#b2dab4a0915eed72741657f783118d9220d4f070"
 dependencies = [
  "libc",
  "librocksdb-sys",
@@ -3238,7 +3238,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 [[package]]
 name = "tycho-block-util"
 version = "0.1.5"
-source = "git+https://github.com/broxus/tycho.git?rev=50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f#50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f"
+source = "git+https://github.com/broxus/tycho.git?rev=b118006b19e715ab7c8c91c1e96126a030ac6d19#b118006b19e715ab7c8c91c1e96126a030ac6d19"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3254,7 +3254,7 @@ dependencies = [
 [[package]]
 name = "tycho-core"
 version = "0.1.5"
-source = "git+https://github.com/broxus/tycho.git?rev=50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f#50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f"
+source = "git+https://github.com/broxus/tycho.git?rev=b118006b19e715ab7c8c91c1e96126a030ac6d19#b118006b19e715ab7c8c91c1e96126a030ac6d19"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3283,7 +3283,7 @@ dependencies = [
 [[package]]
 name = "tycho-light-node"
 version = "0.1.5"
-source = "git+https://github.com/broxus/tycho.git?rev=50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f#50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f"
+source = "git+https://github.com/broxus/tycho.git?rev=b118006b19e715ab7c8c91c1e96126a030ac6d19#b118006b19e715ab7c8c91c1e96126a030ac6d19"
 dependencies = [
  "anyhow",
  "clap",
@@ -3305,7 +3305,7 @@ dependencies = [
 [[package]]
 name = "tycho-network"
 version = "0.1.5"
-source = "git+https://github.com/broxus/tycho.git?rev=50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f#50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f"
+source = "git+https://github.com/broxus/tycho.git?rev=b118006b19e715ab7c8c91c1e96126a030ac6d19#b118006b19e715ab7c8c91c1e96126a030ac6d19"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3344,7 +3344,7 @@ dependencies = [
 [[package]]
 name = "tycho-rpc"
 version = "0.1.5"
-source = "git+https://github.com/broxus/tycho.git?rev=50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f#50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f"
+source = "git+https://github.com/broxus/tycho.git?rev=b118006b19e715ab7c8c91c1e96126a030ac6d19#b118006b19e715ab7c8c91c1e96126a030ac6d19"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3354,7 +3354,6 @@ dependencies = [
  "everscale-types",
  "futures-util",
  "metrics",
- "moka",
  "parking_lot",
  "prost",
  "serde",
@@ -3373,7 +3372,7 @@ dependencies = [
 [[package]]
 name = "tycho-storage"
 version = "0.1.5"
-source = "git+https://github.com/broxus/tycho.git?rev=50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f#50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f"
+source = "git+https://github.com/broxus/tycho.git?rev=b118006b19e715ab7c8c91c1e96126a030ac6d19#b118006b19e715ab7c8c91c1e96126a030ac6d19"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3414,7 +3413,7 @@ dependencies = [
 [[package]]
 name = "tycho-util"
 version = "0.1.5"
-source = "git+https://github.com/broxus/tycho.git?rev=50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f#50cd46aa9af5b2ab6d0578c0c376d2382ebdbb4f"
+source = "git+https://github.com/broxus/tycho.git?rev=b118006b19e715ab7c8c91c1e96126a030ac6d19#b118006b19e715ab7c8c91c1e96126a030ac6d19"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3656,14 +3655,13 @@ dependencies = [
 
 [[package]]
 name = "weedb"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce5b35f90e43128653b3623cf75c84a968072ed691426d747dbeaf3755ee5b1d"
+version = "0.3.8"
+source = "git+https://github.com/broxus/weedb.git?rev=59728ea0c8703dd28a4c37dee05c1321cd81b966#59728ea0c8703dd28a4c37dee05c1321cd81b966"
 dependencies = [
  "librocksdb-sys",
  "metrics",
  "rocksdb",
- "thiserror 2.0.11",
+ "thiserror 1.0.69",
  "tracing",
 ]
 
@@ -4038,8 +4036,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "weedb"
-version = "0.3.8"
-source = "git+https://github.com/broxus/weedb.git?rev=59728ea0c8703dd28a4c37dee05c1321cd81b966#59728ea0c8703dd28a4c37dee05c1321cd81b966"

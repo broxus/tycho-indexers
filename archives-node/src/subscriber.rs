@@ -9,6 +9,7 @@ use object_store::{DynObjectStore, ObjectStore, WriteMultipart};
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 use tycho_core::block_strider::{ArchiveSubscriber, ArchiveSubscriberContext};
+use tycho_storage::Storage;
 use tycho_util::metrics::HistogramGuard;
 use tycho_util::sync::CancellationFlag;
 
@@ -59,6 +60,30 @@ impl ArchiveUploader {
         })
     }
 
+    // Finish upload last committed archives
+    async fn upload_committed_archives(&self, storage: &Storage) -> Result<()> {
+        let block_storage = storage.block_storage();
+
+        let archive_ids = block_storage.list_archive_ids();
+
+        let start = archive_ids
+            .len()
+            .saturating_sub(self.config.last_archives_to_upload);
+
+        for archive_id in archive_ids[start..].iter() {
+            // Check archive is committed
+            if block_storage.get_archive_size(*archive_id)?.is_some() {
+                self.handle_archive(&ArchiveSubscriberContext {
+                    archive_id: *archive_id,
+                    storage,
+                })
+                .await?;
+            }
+        }
+
+        Ok(())
+    }
+
     async fn handle_archive(&self, cx: &ArchiveSubscriberContext<'_>) -> Result<()> {
         let mut prev_archive_upload = self.prev_archive_upload.lock().await;
 
@@ -100,7 +125,7 @@ impl ArchiveUploader {
                 // Block the strider until we successfully upload
                 loop {
                     attempts += 1;
-                    tracing::debug!(attempt = attempts, "starting upload archive");
+                    tracing::info!(attempt = attempts, "starting upload archive");
 
                     let upload = match s3_storage
                         .put_multipart(&Path::from(location.clone()))
@@ -164,6 +189,7 @@ impl ArchiveUploader {
                 // Done
                 scopeguard::ScopeGuard::into_inner(guard);
                 tracing::info!(
+                    attempts,
                     elapsed = %humantime::format_duration(histogram.finish()),
                     "finished"
                 );
@@ -202,6 +228,17 @@ impl ArchiveSubscriber for ArchiveUploader {
 pub enum OptionalArchiveSubscriber {
     ArchiveUploader(ArchiveUploader),
     BlackHole,
+}
+
+impl OptionalArchiveSubscriber {
+    pub async fn upload_committed_archives(&self, storage: &Storage) -> Result<()> {
+        match self {
+            OptionalArchiveSubscriber::ArchiveUploader(uploader) => {
+                uploader.upload_committed_archives(storage).await
+            }
+            OptionalArchiveSubscriber::BlackHole => Ok(()),
+        }
+    }
 }
 
 impl ArchiveSubscriber for OptionalArchiveSubscriber {

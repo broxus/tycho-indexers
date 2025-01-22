@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
 
     let import_zerostate = args.node.import_zerostate.clone();
 
-    let uploader = match &config.user_config.s3_uploader {
+    let archive_uploader = match &config.user_config.s3_uploader {
         None => {
             tracing::warn!("Starting without archive uploader");
             OptionalArchiveSubscriber::BlackHole
@@ -80,11 +80,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let storage = node.storage();
-    let archive_uploader = ArchiveHandler::new(storage.clone(), uploader)?;
+    archive_uploader.upload_committed_archives(storage).await?;
 
-    // TODO: Finish not uploaded archives
-
-    node.run((state_applier, archive_uploader, rpc_state.0))
+    let archive_handler = ArchiveHandler::new(storage.clone(), archive_uploader)?;
+    node.run((state_applier, archive_handler, rpc_state.0))
         .await?;
 
     Ok(tokio::signal::ctrl_c().await?)

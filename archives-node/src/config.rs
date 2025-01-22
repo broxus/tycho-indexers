@@ -39,6 +39,10 @@ pub struct ArchiveUploaderConfig {
     /// Max concurrency uploading tasks.
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: usize,
+
+    /// Number of recent archives to re-upload
+    #[serde(default = "default_last_archives_to_upload")]
+    pub last_archives_to_upload: usize,
 }
 
 fn default_bucket_name() -> String {
@@ -60,6 +64,10 @@ fn default_max_concurrency() -> usize {
             .unwrap_or(8),
         16, // Reasonable upper limit
     )
+}
+
+fn default_last_archives_to_upload() -> usize {
+    3
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
