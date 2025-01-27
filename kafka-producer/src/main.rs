@@ -1,7 +1,6 @@
 use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
-use tycho_block_util::state::MinRefMcStateTracker;
 use tycho_core::block_strider::{PsSubscriber, ShardStateApplier};
 
 use crate::config::UserConfig;
@@ -69,18 +68,12 @@ async fn main() -> anyhow::Result<()> {
 
     let state_applier = {
         let storage = node.storage();
-
         let ps_subscriber = PsSubscriber::new(storage.clone());
-        let state_tracker = MinRefMcStateTracker::default();
 
-        ShardStateApplier::new(
-            state_tracker.clone(),
-            storage.clone(),
-            (rpc_state.1, writer, ps_subscriber),
-        )
+        ShardStateApplier::new(storage.clone(), (rpc_state.1, writer, ps_subscriber))
     };
 
-    node.run((state_applier, rpc_state.0)).await?;
+    let _node = node.run((state_applier, rpc_state.0)).await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }

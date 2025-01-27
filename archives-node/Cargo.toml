@@ -1,6 +1,6 @@
 [package]
 name = "archives-node"
-version = "0.1.5+tychov-b118006b19e715ab7c8c91c1e96126a030ac6d19"
+version = "0.1.5+tychov-4fb8f9b"
 edition = "2021"
 
 [dependencies]
@@ -18,7 +18,6 @@ tracing = { workspace = true }
 tikv-jemalloc-ctl = { workspace = true }
 tikv-jemallocator = { workspace = true }
 
-tycho-block-util = { workspace = true }
 tycho-core = { workspace = true }
 tycho-light-node = { workspace = true }
 tycho-storage = { workspace = true }
