@@ -127,7 +127,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
-name = "archives-node"
+name = "archives-downloader"
+version = "0.1.5+tychov-4fb8f9b"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "bytesize",
+ "clap",
+ "everscale-crypto",
+ "everscale-types",
+ "futures-util",
+ "metrics",
+ "object_store",
+ "parking_lot",
+ "rand",
+ "scopeguard",
+ "serde",
+ "serde_json",
+ "tikv-jemalloc-ctl",
+ "tikv-jemallocator",
+ "tokio",
+ "tracing",
+ "tycho-block-util",
+ "tycho-core",
+ "tycho-light-node",
+ "tycho-network",
+ "tycho-storage",
+ "tycho-util",
+]
+
+[[package]]
+name = "archives-uploader"
 version = "0.1.5+tychov-4fb8f9b"
 dependencies = [
  "anyhow",
