@@ -76,8 +76,7 @@ async fn main() -> anyhow::Result<()> {
     archive_uploader.upload_committed_archives(storage).await?;
 
     let archive_handler = ArchiveHandler::new(storage.clone(), archive_uploader)?;
-    let _node = node
-        .run((state_applier, archive_handler, rpc_state.0))
+    node.run((state_applier, archive_handler, rpc_state.0))
         .await?;
 
     Ok(tokio::signal::ctrl_c().await?)

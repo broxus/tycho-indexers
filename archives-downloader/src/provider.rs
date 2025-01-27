@@ -423,9 +423,7 @@ impl ArchiveDownloader {
                 }
             };
 
-            if let Err(e) = archive.check_mc_blocks_range() {
-                return Err(e);
-            }
+            archive.check_mc_blocks_range()?;
 
             Ok(ArchiveInfo {
                 archive: Arc::new(archive),

@@ -2,7 +2,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::config::{NodeConfig, NodeKeys};
 use anyhow::{Context, Result};
 use clap::Args;
 use everscale_crypto::ed25519;
@@ -23,6 +22,8 @@ use tycho_storage::{BlockHandle, NewBlockMeta, Storage};
 use tycho_util::cli::logger::init_logger;
 use tycho_util::cli::resolve_public_ip;
 use tycho_util::FastHashMap;
+
+use crate::config::{NodeConfig, NodeKeys};
 
 /// Run a Tycho node.
 #[derive(Args, Clone)]
@@ -402,14 +403,12 @@ impl<C> Node<C> {
         let persistent_states = self.storage.persistent_state_storage();
 
         for state in to_import {
-            let (handle, status) = handle_storage.create_or_load_handle(
-                state.block_id(),
-                NewBlockMeta {
+            let (handle, status) =
+                handle_storage.create_or_load_handle(state.block_id(), NewBlockMeta {
                     is_key_block: state.block_id().is_masterchain(),
                     gen_utime,
                     ref_by_mc_seqno: 0,
-                },
-            );
+                });
 
             let stored = state_storage
                 .store_state(&handle, &state, Default::default())

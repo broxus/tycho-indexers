@@ -1,6 +1,6 @@
 [package]
 name = "kafka-producer"
-version = "0.1.5+tychov-4fb8f9b"
+version = "0.1.5+tychov-e143294"
 edition = "2021"
 
 [dependencies]
