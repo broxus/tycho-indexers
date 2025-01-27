@@ -102,12 +102,14 @@ impl ArchiveUploader {
 
         let handle = tokio::task::spawn({
             let archive_id = cx.archive_id;
-            let storage = cx.storage.clone();
             let location = cx.archive_id.to_string();
 
             let retry_delay = self.config.retry_delay;
             let chunk_size = self.config.chunk_size.as_u64() as _;
             let max_concurrency = self.config.max_concurrency;
+            let enable_duplication = self.config.enable_duplication;
+
+            let storage = cx.storage.clone();
             let s3_storage = self.s3_storage.clone();
 
             let cancelled = cancelled.clone();
@@ -121,16 +123,20 @@ impl ArchiveUploader {
                 });
 
                 // Check archive existence before upload
-                match s3_storage.head(&Path::from(location.clone())).await {
-                    Ok(meta) => {
-                        tracing::info!(?meta, "archive already exists, skipping upload");
-                        return Ok(());
-                    }
-                    Err(object_store::Error::NotFound { path, .. }) => {
-                        tracing::info!(path, "archive not found, starting upload");
-                    }
-                    Err(e) => {
-                        tracing::error!("error checking archive existence: {e}, starting upload");
+                if !enable_duplication {
+                    match s3_storage.head(&Path::from(location.clone())).await {
+                        Ok(meta) => {
+                            tracing::info!(?meta, "archive already exists, skipping upload");
+                            return Ok(());
+                        }
+                        Err(object_store::Error::NotFound { path, .. }) => {
+                            tracing::info!(path, "archive not found, starting upload");
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "error checking archive existence: {e}, starting upload"
+                            );
+                        }
                     }
                 }
 

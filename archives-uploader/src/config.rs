@@ -43,6 +43,12 @@ pub struct ArchiveUploaderConfig {
     /// Number of recent archives to re-upload
     #[serde(default = "default_last_archives_to_upload")]
     pub last_archives_to_upload: usize,
+
+    /// Enable duplication data in S3.
+    ///
+    /// Default: false.
+    #[serde(default = "default_enable_duplication")]
+    pub enable_duplication: bool,
 }
 
 fn default_bucket_name() -> String {
@@ -55,6 +61,10 @@ fn default_retry_delay() -> Duration {
 
 fn default_chunk_size() -> ByteSize {
     ByteSize::mb(10)
+}
+
+fn default_enable_duplication() -> bool {
+    false
 }
 
 fn default_max_concurrency() -> usize {
