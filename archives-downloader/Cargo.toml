@@ -1,6 +1,6 @@
 [package]
 name = "archives-downloader"
-version = "0.1.5+tychov-4fb8f9b"
+version = "0.1.5+tychov-e143294"
 edition = "2021"
 
 [dependencies]
@@ -21,7 +21,6 @@ tikv-jemallocator = { workspace = true }
 
 tycho-core = { workspace = true }
 tycho-block-util = { workspace = true }
-tycho-light-node = { workspace = true }
 tycho-network = { workspace = true }
 tycho-storage = { workspace = true }
 tycho-util = { workspace = true }

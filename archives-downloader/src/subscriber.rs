@@ -66,15 +66,11 @@ impl BlockApplier {
 
         let info = block.load_info()?;
         let res = block_storage
-            .store_block_data(
-                block,
-                archive_data,
-                NewBlockMeta {
-                    is_key_block: info.key_block,
-                    gen_utime: info.gen_utime,
-                    ref_by_mc_seqno: mc_block_id.seqno,
-                },
-            )
+            .store_block_data(block, archive_data, NewBlockMeta {
+                is_key_block: info.key_block,
+                gen_utime: info.gen_utime,
+                ref_by_mc_seqno: mc_block_id.seqno,
+            })
             .await?;
 
         Ok(res.handle)

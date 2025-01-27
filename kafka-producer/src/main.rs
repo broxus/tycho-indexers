@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
         ShardStateApplier::new(storage.clone(), (rpc_state.1, writer, ps_subscriber))
     };
 
-    let _node = node.run((state_applier, rpc_state.0)).await?;
+    node.run((state_applier, rpc_state.0)).await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }
