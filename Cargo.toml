@@ -1,20 +1,26 @@
 [workspace]
 resolver = "2"
 members = [
-    "archives-node",
+    "archives-downloader",
+    "archives-uploader",
     "kafka-producer",
 ]
 
 [workspace.dependencies]
 anyhow = "1.0.93"
+bytes = "1.9.0"
 bytesize = { version = "1.3.0", features = ["serde"] }
 clap = { version = "4.5.20", features = ["derive"] }
+everscale-crypto = "0.3"
 everscale-types = { version = "0.1.2", features = ["tycho"] }
 hex = "0.4"
 humantime = "2"
 md5 = "0.7.0"
-object_store = { version = "0.11.2", features = ["aws", "gcp"] }
+object_store = "0.11"
+parking_lot = { version = "0.12.1" }
+rand = "0.8"
 scopeguard = "1.2"
+serde_json = "1.0.114"
 tokio = { version = "1.41.0", features = ["full"] }
 tracing = "0.1.40"
 tikv-jemalloc-ctl = { version = "0.6.0", features = ["stats"] }
@@ -29,6 +35,7 @@ metrics-exporter-prometheus = "0.15.0"
 tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "4fb8f9b03e0caeef673f84576dd380d07313d9d0" }
 tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "4fb8f9b03e0caeef673f84576dd380d07313d9d0" }
 tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "4fb8f9b03e0caeef673f84576dd380d07313d9d0" }
+tycho-network = { git = "https://github.com/broxus/tycho.git", rev = "4fb8f9b03e0caeef673f84576dd380d07313d9d0" }
 tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "4fb8f9b03e0caeef673f84576dd380d07313d9d0" }
 tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "4fb8f9b03e0caeef673f84576dd380d07313d9d0" }
 

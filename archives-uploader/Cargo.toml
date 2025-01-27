@@ -1,5 +1,5 @@
 [package]
-name = "archives-node"
+name = "archives-uploader"
 version = "0.1.5+tychov-4fb8f9b"
 edition = "2021"
 
@@ -11,7 +11,7 @@ hex = { workspace = true }
 humantime = { workspace = true }
 metrics = { workspace = true }
 md5 = { workspace = true }
-object_store = { workspace = true }
+object_store = { workspace = true, features = ["aws", "gcp"] }
 scopeguard = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
