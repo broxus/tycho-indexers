@@ -115,7 +115,7 @@ impl ArchiveUploader {
             let cancelled = cancelled.clone();
 
             async move {
-                let histogram = HistogramGuard::begin("tycho_storage_upload_archive_time");
+                let histogram = HistogramGuard::begin("tycho_uploader_upload_archive_time");
 
                 tracing::info!("started");
                 let guard = scopeguard::guard((), |_| {
@@ -205,6 +205,8 @@ impl ArchiveUploader {
                         }
                     }
                 }
+
+                metrics::gauge!("tycho_uploader_last_uploaded_archive_seqno").set(archive_id);
 
                 // Done
                 scopeguard::ScopeGuard::into_inner(guard);
