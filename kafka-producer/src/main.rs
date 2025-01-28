@@ -59,6 +59,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut node = args.node.create(config).await?;
     let init_block_id = node.init(import_zerostate).await?;
+    node.update_validator_set(&init_block_id).await?;
 
     let rpc_state = node
         .create_rpc(&init_block_id)
