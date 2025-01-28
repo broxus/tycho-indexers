@@ -1,10 +1,10 @@
 use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
+use tycho_core::block_strider::{PsSubscriber, ShardStateApplier};
 
 use crate::config::UserConfig;
 use crate::provider::{ArchiveBlockProvider, ArchiveBlockProviderConfig};
-use crate::subscriber::BlockApplier;
 
 mod cli;
 mod config;
@@ -48,8 +48,8 @@ async fn main() -> anyhow::Result<()> {
 
     let mut node = args.node.create(config.clone()).await?;
 
-    let last_block_id = node.init(import_zerostate).await?;
-    node.update_validator_set(&last_block_id).await?;
+    let init_block_id = node.init(import_zerostate).await?;
+    node.update_validator_set(&init_block_id).await?;
 
     let archive_block_provider = ArchiveBlockProvider::new(
         node.blockchain_rpc_client().clone(),
@@ -61,12 +61,20 @@ async fn main() -> anyhow::Result<()> {
         },
     )?;
 
-    let block_applier = {
+    let state_applier = {
         let storage = node.storage();
-        BlockApplier::new(storage.clone())
+        let ps_subscriber = PsSubscriber::new(storage.clone());
+
+        ShardStateApplier::new(storage.clone(), ps_subscriber)
     };
 
-    node.run(archive_block_provider, block_applier).await?;
+    let node_stats = {
+        let storage = node.storage();
+        subscriber::NodeStats::new(storage.clone())
+    };
+
+    node.run(archive_block_provider, (state_applier, node_stats))
+        .await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }
