@@ -15,7 +15,7 @@ from dashboard_builder import (
     heatmap_panel,
     yaxis,
     expr_operator,
-    expr_max,
+    expr_min,
     DATASOURCE,
 )
 from grafanalib import formatunits as UNITS, _gen
@@ -274,7 +274,7 @@ def archives_uploader() -> RowPanel:
         Stat(
             targets=[
                 Target(
-                    expr=f"""{expr_max(
+                    expr=f"""{expr_min(
                         'tycho_core_last_mc_block_seqno',
                         by_labels=[]
                     )}""",
@@ -283,7 +283,7 @@ def archives_uploader() -> RowPanel:
                     datasource=DATASOURCE,
                 ),
                 Target(
-                    expr=f"""{expr_max(
+                    expr=f"""{expr_min(
                         'tycho_uploader_last_uploaded_archive_seqno',
                         by_labels=[]
                     )}""",
@@ -297,28 +297,11 @@ def archives_uploader() -> RowPanel:
             reduceCalc="lastNotNull",
             format=UNITS.NONE_FORMAT,
         ),
-        timeseries_panel(
-            targets=[
-                target(
-                    expr_avg(
-                        "tycho_uploader_archive_size",
-                        label_selectors=['quantile="0.5"'],
-                        by_labels=[],
-                    ),
-                    legend_format="P50",
-                ),
-                target(
-                    expr_avg(
-                        "tycho_uploader_archive_size",
-                        label_selectors=['quantile="0.999"'],
-                        by_labels=[],
-                    ),
-                    legend_format="P99",
-                ),
-            ],
-            title="Archive Size",
-            unit=UNITS.BYTES,
-            legend_display_mode="hidden",
+        create_heatmap_quantile_panel(
+            "tycho_uploader_archive_size",
+            "Archive size",
+            UNITS.BYTES_IEC,
+            "0.999",
         ),
         create_heatmap_panel(
             "tycho_uploader_upload_archive_time", "Time to upload archive"
@@ -638,11 +621,11 @@ def templates() -> Templating:
 
 
 dashboard = Dashboard(
-    "Tycho Archive Node Metrics",
+    "Tycho Indexers Metrics",
     templating=templates(),
     refresh="5s",
     panels=[
-        stats(),
+        archives_uploader(),
         core_block_strider(),
         storage(),
         allocator_stats(),
