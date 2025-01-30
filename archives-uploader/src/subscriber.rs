@@ -162,6 +162,8 @@ impl ArchiveUploader {
                     // Buffer for MD5 hashes for all chunks
                     let mut md5_buffer = vec![];
 
+                    let mut uploaded = 0;
+
                     let mut writer = WriteMultipart::new_with_chunk_size(upload, chunk_size);
                     for (_, chunk) in storage.block_storage().archive_chunks_iterator(archive_id) {
                         anyhow::ensure!(!cancelled.check(), "task aborted");
@@ -178,6 +180,8 @@ impl ArchiveUploader {
 
                         // Calculate MD5 chunk
                         md5_buffer.extend_from_slice(md5::compute(&chunk).as_slice());
+
+                        uploaded += chunk.len();
                     }
 
                     match writer.finish().await {
@@ -188,6 +192,10 @@ impl ArchiveUploader {
                                 tag.trim_matches('"').starts_with(&expected_etag)
                             }) {
                                 tracing::info!("upload archive completed successfully");
+
+                                metrics::histogram!("tycho_uploader_archive_size")
+                                    .record(uploaded as f64);
+
                                 break;
                             }
 
