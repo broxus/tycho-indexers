@@ -9,7 +9,6 @@ use crate::provider::{ArchiveBlockProvider, ArchiveBlockProviderConfig};
 mod cli;
 mod config;
 mod provider;
-mod subscriber;
 
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
@@ -68,13 +67,7 @@ async fn main() -> anyhow::Result<()> {
         ShardStateApplier::new(storage.clone(), ps_subscriber)
     };
 
-    let node_stats = {
-        let storage = node.storage();
-        subscriber::NodeStats::new(storage.clone())
-    };
-
-    node.run(archive_block_provider, (state_applier, node_stats))
-        .await?;
+    node.run(archive_block_provider, state_applier).await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }
