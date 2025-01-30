@@ -7,7 +7,6 @@ use crate::config::UserConfig;
 use crate::subscriber::{ArchiveUploader, OptionalArchiveSubscriber};
 
 mod config;
-mod node_stats;
 mod subscriber;
 
 #[global_allocator]
@@ -74,13 +73,11 @@ async fn main() -> anyhow::Result<()> {
         ShardStateApplier::new(storage.clone(), (rpc_state.1, ps_subscriber))
     };
 
-    let node_stats = node_stats::NodeStats;
-
     let storage = node.storage();
     archive_uploader.upload_committed_archives(storage).await?;
 
     let archive_handler = ArchiveHandler::new(storage.clone(), archive_uploader)?;
-    node.run((state_applier, archive_handler, node_stats, rpc_state.0))
+    node.run((state_applier, archive_handler, rpc_state.0))
         .await?;
 
     Ok(tokio::signal::ctrl_c().await?)
