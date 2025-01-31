@@ -11,9 +11,7 @@ clap = { workspace = true }
 metrics = { workspace = true }
 object_store = { workspace = true, features = ["aws", "gcp"] }
 parking_lot = { workspace = true }
-rand = { workspace = true }
 scopeguard = { workspace = true }
-serde_json = { workspace = true, features = ["preserve_order"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tikv-jemalloc-ctl = { workspace = true }
@@ -21,11 +19,9 @@ tikv-jemallocator = { workspace = true }
 
 tycho-core = { workspace = true }
 tycho-block-util = { workspace = true }
-tycho-network = { workspace = true }
 tycho-storage = { workspace = true }
 tycho-util = { workspace = true }
 
-everscale-crypto = { workspace = true }
 everscale-types = { workspace = true }
 
 serde = { workspace = true }

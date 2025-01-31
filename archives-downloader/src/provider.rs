@@ -9,6 +9,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use bytesize::ByteSize;
 use everscale_types::models::BlockId;
 use futures_util::future::BoxFuture;
+use futures_util::{StreamExt, TryStreamExt};
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
 use object_store::{DynObjectStore, ObjectStore};
@@ -18,7 +19,6 @@ use tokio::task::AbortHandle;
 use tycho_block_util::archive::{Archive, ArchiveVerifier};
 use tycho_block_util::block::{BlockIdRelation, BlockStuffAug};
 use tycho_core::block_strider::{BlockProvider, CheckProof, OptionalBlockStuff, ProofChecker};
-use tycho_core::blockchain_rpc::{BlockchainRpcClient, PendingArchiveResponse};
 use tycho_storage::{MappedFile, Storage};
 
 use crate::config::ArchiveProviderConfig;
@@ -48,11 +48,7 @@ pub struct ArchiveBlockProvider {
 }
 
 impl ArchiveBlockProvider {
-    pub fn new(
-        client: BlockchainRpcClient,
-        storage: Storage,
-        config: ArchiveBlockProviderConfig,
-    ) -> Result<Self> {
+    pub fn new(storage: Storage, config: ArchiveBlockProviderConfig) -> Result<Self> {
         let proof_checker = ProofChecker::new(storage.clone());
 
         let s3_client: Arc<DynObjectStore> = match &config.s3_provider {
@@ -87,7 +83,6 @@ impl ArchiveBlockProvider {
 
         Ok(Self {
             inner: Arc::new(Inner {
-                client,
                 s3_client,
 
                 proof_checker,
@@ -191,7 +186,6 @@ impl ArchiveBlockProvider {
 struct Inner {
     storage: Storage,
 
-    client: BlockchainRpcClient,
     s3_client: Arc<DynObjectStore>,
 
     proof_checker: ProofChecker,
@@ -291,7 +285,6 @@ impl Inner {
 
     fn make_downloader(&self) -> ArchiveDownloader {
         ArchiveDownloader {
-            client: self.client.clone(),
             s3_client: self.s3_client.clone(),
             storage: self.storage.clone(),
             memory_threshold: self.config.max_archive_to_memory_size,
@@ -349,7 +342,6 @@ struct ArchiveInfo {
 }
 
 struct ArchiveDownloader {
-    client: BlockchainRpcClient,
     s3_client: Arc<DynObjectStore>,
     storage: Storage,
     memory_threshold: ByteSize,
@@ -401,14 +393,33 @@ impl ArchiveDownloader {
     }
 
     async fn try_download(&self, seqno: u32) -> Result<Option<ArchiveInfo>> {
-        let response = self.client.find_archive(seqno).await?;
-        let pending = match response {
-            PendingArchiveResponse::Found(pending) => pending,
-            PendingArchiveResponse::TooNew => anyhow::bail!("archive {seqno} too new"),
+        let prefix = (seqno / 100).max(1);
+
+        let mut list_stream = self.s3_client.list(None).try_filter(|obj| {
+            futures_util::future::ready(
+                obj.location
+                    .as_ref()
+                    .starts_with(prefix.to_string().as_str()),
+            )
+        });
+
+        let mut archives = BTreeMap::new();
+        while let Some(item) = list_stream.next().await {
+            let object = item?;
+
+            let id: u32 = object.location.to_string().parse()?;
+            archives.insert(id, object.size);
+        }
+
+        let id = archives.range(..=seqno).next_back();
+
+        let (id, size) = match id {
+            Some((id, size)) => (*id as _, NonZeroU64::new(*size as _).unwrap()),
+            None => anyhow::bail!("archive {seqno} too new"),
         };
 
-        let writer = self.get_archive_writer(&pending.size)?;
-        let writer = self.download_archive(pending.id, writer).await?;
+        let writer = self.get_archive_writer(&size)?;
+        let writer = self.download_archive(id, writer).await?;
 
         let span = tracing::Span::current();
         tokio::task::spawn_blocking(move || {

@@ -47,18 +47,14 @@ async fn main() -> anyhow::Result<()> {
 
     let mut node = args.node.create(config.clone()).await?;
 
-    let init_block_id = node.init(import_zerostate).await?;
-    node.update_validator_set(&init_block_id).await?;
+    node.init(import_zerostate).await?;
 
-    let archive_block_provider = ArchiveBlockProvider::new(
-        node.blockchain_rpc_client().clone(),
-        node.storage().clone(),
-        ArchiveBlockProviderConfig {
+    let archive_block_provider =
+        ArchiveBlockProvider::new(node.storage().clone(), ArchiveBlockProviderConfig {
             bucket_name: config.user_config.bucket_name,
             s3_provider: config.user_config.s3_provider,
             max_archive_to_memory_size: config.archive_block_provider.max_archive_to_memory_size,
-        },
-    )?;
+        })?;
 
     let state_applier = {
         let storage = node.storage();
