@@ -143,7 +143,7 @@ impl ArchiveUploader {
                 let mut attempts = 0;
 
                 // Block the strider until we successfully upload
-                loop {
+                'upload_loop: loop {
                     attempts += 1;
                     tracing::info!(attempt = attempts, "starting upload archive");
 
@@ -165,23 +165,29 @@ impl ArchiveUploader {
                     let mut uploaded = 0;
 
                     let mut writer = WriteMultipart::new_with_chunk_size(upload, chunk_size);
-                    for (_, chunk) in storage.block_storage().archive_chunks_iterator(archive_id) {
+                    let mut iter = storage.block_storage().archive_chunks_iterator(archive_id);
+                    while iter.valid() {
                         anyhow::ensure!(!cancelled.check(), "task aborted");
 
                         if let Err(e) = writer.wait_for_capacity(max_concurrency).await {
                             tracing::error!(attempts, "failed to acquire upload capacity: {e}");
                             tokio::time::sleep(retry_delay).await;
 
-                            continue;
+                            continue 'upload_loop;
                         }
 
+                        let chunk = iter.value().expect("shouldn't happen");
+
                         // Write chunk
-                        writer.write(&chunk);
+                        writer.write(chunk);
 
                         // Calculate MD5 chunk
-                        md5_buffer.extend_from_slice(md5::compute(&chunk).as_slice());
+                        md5_buffer.extend_from_slice(md5::compute(chunk).as_slice());
 
                         uploaded += chunk.len();
+
+                        // Next key
+                        iter.next();
                     }
 
                     match writer.finish().await {
