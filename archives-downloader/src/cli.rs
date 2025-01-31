@@ -1,10 +1,7 @@
-use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Args;
-use everscale_crypto::ed25519;
 use everscale_types::models::*;
 use everscale_types::prelude::{Boc, CellBuilder};
 use tycho_block_util::state::{MinRefMcStateTracker, ShardStateStuff};
@@ -12,18 +9,12 @@ use tycho_core::block_strider::{
     BlockProvider, BlockStrider, BlockSubscriber, BlockSubscriberExt, FileZerostateProvider,
     GcSubscriber, PersistentBlockStriderState, ZerostateProvider,
 };
-use tycho_core::blockchain_rpc::{
-    BlockchainRpcClient, BlockchainRpcService, NoopBroadcastListener,
-};
 use tycho_core::global_config::{GlobalConfig, ZerostateId};
-use tycho_core::overlay_client::PublicOverlayClient;
-use tycho_network::{DhtService, Network, OverlayService, PublicOverlay, Router};
 use tycho_storage::{BlockHandle, NewBlockMeta, Storage};
 use tycho_util::cli::logger::init_logger;
-use tycho_util::cli::resolve_public_ip;
 use tycho_util::FastHashMap;
 
-use crate::config::{NodeConfig, NodeKeys};
+use crate::config::NodeConfig;
 
 /// Run a Tycho node.
 #[derive(Args, Clone)]
@@ -48,10 +39,6 @@ pub struct CmdRun {
     #[clap(long, required_unless_present = "init_config")]
     pub global_config: Option<PathBuf>,
 
-    /// path to the node keys
-    #[clap(long, required_unless_present = "init_config")]
-    pub keys: Option<PathBuf>,
-
     /// path to the logger config
     #[clap(long)]
     pub logger_config: Option<PathBuf>,
@@ -72,23 +59,11 @@ impl CmdRun {
             tycho_util::cli::metrics::init_metrics(metrics)?;
         }
 
-        let keys_path = self.keys.unwrap();
-        let keys = if keys_path.exists() {
-            NodeKeys::from_file(keys_path).context("failed to load node keys")?
-        } else {
-            let keys = NodeKeys::generate();
-            keys.save_to_file(keys_path)?;
-            keys
-        };
-
         let node = {
             let global_config = GlobalConfig::from_file(self.global_config.unwrap())
                 .context("failed to load global config")?;
 
-            let public_ip = resolve_public_ip(node_config.public_ip).await?;
-            let socket_addr = SocketAddr::new(public_ip, node_config.port);
-
-            Node::new(socket_addr, keys, node_config, global_config).await?
+            Node::new(node_config, global_config).await?
         };
 
         Ok(node)
@@ -99,7 +74,6 @@ pub struct Node<C> {
     zerostate: ZerostateId,
 
     storage: Storage,
-    blockchain_rpc_client: BlockchainRpcClient,
 
     run_handle: Option<tokio::task::JoinHandle<()>>,
 
@@ -107,66 +81,11 @@ pub struct Node<C> {
 }
 
 impl<C> Node<C> {
-    pub async fn new(
-        public_addr: SocketAddr,
-        keys: NodeKeys,
-        node_config: NodeConfig<C>,
-        global_config: GlobalConfig,
-    ) -> Result<Node<C>>
+    pub async fn new(node_config: NodeConfig<C>, global_config: GlobalConfig) -> Result<Node<C>>
     where
         C: Clone,
     {
-        // Setup network
-        let keypair = Arc::new(ed25519::KeyPair::from(&keys.as_secret()));
-        let local_id = keypair.public_key.into();
-
         let config = node_config.clone();
-
-        let (dht_tasks, dht_service) = DhtService::builder(local_id)
-            .with_config(node_config.dht)
-            .build();
-
-        let (overlay_tasks, overlay_service) = OverlayService::builder(local_id)
-            .with_config(node_config.overlay)
-            .with_dht_service(dht_service.clone())
-            .build();
-
-        let router = Router::builder()
-            .route(dht_service.clone())
-            .route(overlay_service.clone())
-            .build();
-
-        let local_addr = SocketAddr::from((node_config.local_ip, node_config.port));
-
-        let network = Network::builder()
-            .with_config(node_config.network)
-            .with_private_key(keys.secret.0)
-            .with_remote_addr(public_addr)
-            .build(local_addr, router)
-            .context("failed to build node network")?;
-
-        dht_tasks.spawn(&network);
-        overlay_tasks.spawn(&network);
-
-        let dht_client = dht_service.make_client(&network);
-        let peer_resolver = dht_service
-            .make_peer_resolver()
-            .with_config(node_config.peer_resolver)
-            .build(&network);
-
-        let mut bootstrap_peers = 0usize;
-        for peer in global_config.bootstrap_peers {
-            let is_new = dht_client.add_peer(Arc::new(peer))?;
-            bootstrap_peers += is_new as usize;
-        }
-
-        tracing::info!(
-            %local_id,
-            %local_addr,
-            %public_addr,
-            bootstrap_peers,
-            "initialized network"
-        );
 
         // Setup storage
         let storage = Storage::builder()
@@ -179,46 +98,17 @@ impl<C> Node<C> {
             "initialized storage"
         );
 
-        // Setup blockchain rpc
         let zerostate = global_config.zerostate;
-
-        let blockchain_rpc_service = BlockchainRpcService::builder()
-            .with_config(node_config.blockchain_rpc_service)
-            .with_storage(storage.clone())
-            .with_broadcast_listener(NoopBroadcastListener)
-            .build();
-
-        let public_overlay = PublicOverlay::builder(zerostate.compute_public_overlay_id())
-            .with_peer_resolver(peer_resolver)
-            .build(blockchain_rpc_service);
-        overlay_service.add_public_overlay(&public_overlay);
-
-        let blockchain_rpc_client = BlockchainRpcClient::builder()
-            .with_config(node_config.blockchain_rpc_client)
-            .with_public_overlay_client(PublicOverlayClient::new(
-                network,
-                public_overlay,
-                node_config.public_overlay_client,
-            ))
-            .build();
-
-        tracing::info!(
-            overlay_id = %blockchain_rpc_client.overlay().overlay_id(),
-            "initialized blockchain rpc"
-        );
 
         Ok(Self {
             zerostate,
             storage,
-            blockchain_rpc_client,
             _config: config,
             run_handle: None,
         })
     }
 
     pub async fn init(&self, import_zerostate: Option<Vec<PathBuf>>) -> Result<BlockId> {
-        self.wait_for_neighbours().await;
-
         let last_mc_block_id = self
             .boot(import_zerostate)
             .await
@@ -227,17 +117,6 @@ impl<C> Node<C> {
         tracing::info!(%last_mc_block_id, "node initialized");
 
         Ok(last_mc_block_id)
-    }
-
-    async fn wait_for_neighbours(&self) {
-        // Ensure that there are some neighbours
-        tracing::info!("waiting for initial neighbours");
-        self.blockchain_rpc_client
-            .overlay_client()
-            .neighbours()
-            .wait_for_peers(3)
-            .await;
-        tracing::info!("found initial neighbours");
     }
 
     /// Initialize the node and return the last mc block id.
@@ -291,33 +170,8 @@ impl<C> Node<C> {
         Ok(())
     }
 
-    pub async fn update_validator_set(&self, last_block_id: &BlockId) -> Result<()> {
-        // notify subscriber with an initial validators list
-        let mc_state = self
-            .storage
-            .shard_state_storage()
-            .load_state(last_block_id)
-            .await?;
-        let validator_subscriber = self
-            .blockchain_rpc_client
-            .overlay_client()
-            .validators_resolver()
-            .clone();
-        {
-            let config = mc_state.config_params()?;
-            let current_validator_set = config.get_current_validator_set()?;
-            validator_subscriber.update_validator_set(&current_validator_set);
-        }
-
-        Ok(())
-    }
-
     pub fn storage(&self) -> &Storage {
         &self.storage
-    }
-
-    pub fn blockchain_rpc_client(&self) -> &BlockchainRpcClient {
-        &self.blockchain_rpc_client
     }
 
     #[allow(dead_code)]
