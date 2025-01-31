@@ -4,10 +4,11 @@ use tikv_jemalloc_ctl::{epoch, stats};
 use tycho_core::block_strider::{PsSubscriber, ShardStateApplier};
 
 use crate::config::UserConfig;
-use crate::subscriber::{KafkaProducer, OptionalStateSubscriber};
+use crate::provider::{ArchiveBlockProvider, ArchiveBlockProviderConfig};
 
+mod cli;
 mod config;
-mod subscriber;
+mod provider;
 
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
@@ -15,10 +16,10 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[derive(Parser)]
 struct ExplorerArgs {
     #[clap(flatten)]
-    node: tycho_light_node::CmdRun,
+    node: cli::CmdRun,
 }
 
-type Config = tycho_light_node::NodeConfig<UserConfig>;
+type Config = config::NodeConfig<UserConfig>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -35,46 +36,34 @@ async fn main() -> anyhow::Result<()> {
     let args = ExplorerArgs::parse();
 
     let config: Config =
-        tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
+        config::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
 
     let import_zerostate = args.node.import_zerostate.clone();
-
-    let writer = match &config.user_config.kafka {
-        None => {
-            tracing::warn!("Starting without kafka producer");
-            OptionalStateSubscriber::Blackhole
-        }
-        Some(c) => {
-            let producer = KafkaProducer::new(c.clone())
-                .await
-                .context("failed to create kafka subscriber")?;
-            OptionalStateSubscriber::KafkaProducer(producer)
-        }
-    };
 
     if config.metrics.is_some() {
         spawn_allocator_metrics_loop();
     }
     spawn_allocator_metrics_loop();
 
-    let mut node = args.node.create(config).await?;
-    let init_block_id = node.init(import_zerostate).await?;
-    node.update_validator_set(&init_block_id).await?;
+    let mut node = args.node.create(config.clone()).await?;
 
-    let rpc_state = node
-        .create_rpc(&init_block_id)
-        .await?
-        .map(|x| x.split())
-        .unzip();
+    node.init(import_zerostate).await?;
+
+    let archive_block_provider =
+        ArchiveBlockProvider::new(node.storage().clone(), ArchiveBlockProviderConfig {
+            bucket_name: config.user_config.bucket_name,
+            s3_provider: config.user_config.s3_provider,
+            max_archive_to_memory_size: config.archive_block_provider.max_archive_to_memory_size,
+        })?;
 
     let state_applier = {
         let storage = node.storage();
         let ps_subscriber = PsSubscriber::new(storage.clone());
 
-        ShardStateApplier::new(storage.clone(), (rpc_state.1, writer, ps_subscriber))
+        ShardStateApplier::new(storage.clone(), ps_subscriber)
     };
 
-    node.run((state_applier, rpc_state.0)).await?;
+    node.run(archive_block_provider, state_applier).await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }
