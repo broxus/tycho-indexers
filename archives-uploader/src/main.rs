@@ -1,7 +1,10 @@
 use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
-use tycho_core::block_strider::{ArchiveHandler, PsSubscriber, ShardStateApplier};
+use tycho_core::block_strider::{
+    ArchiveBlockProvider, ArchiveHandler, BlockProviderExt, BlockchainBlockProvider, PsSubscriber,
+    ShardStateApplier, StorageBlockProvider,
+};
 
 use crate::config::UserConfig;
 use crate::subscriber::{ArchiveUploader, OptionalArchiveSubscriber};
@@ -39,6 +42,32 @@ async fn main() -> anyhow::Result<()> {
 
     let import_zerostate = args.node.import_zerostate.clone();
 
+    if config.metrics.is_some() {
+        spawn_allocator_metrics_loop();
+    }
+    spawn_allocator_metrics_loop();
+
+    let mut node = args.node.create(config.clone()).await?;
+    let init_block_id = node.init(import_zerostate, false).await?;
+    node.update_validator_set(&init_block_id).await?;
+
+    // Providers
+    let archive_block_provider = ArchiveBlockProvider::new(
+        node.blockchain_rpc_client().clone(),
+        node.storage().clone(),
+        config.archive_block_provider.clone(),
+    );
+
+    let storage_block_provider = StorageBlockProvider::new(node.storage().clone());
+
+    let blockchain_block_provider = BlockchainBlockProvider::new(
+        node.blockchain_rpc_client().clone(),
+        node.storage().clone(),
+        config.blockchain_block_provider.clone(),
+    )
+    .with_fallback(archive_block_provider.clone());
+
+    // Subscribers
     let archive_uploader = match &config.user_config.s3_uploader {
         None => {
             tracing::warn!("Starting without archive uploader");
@@ -51,14 +80,9 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    if config.metrics.is_some() {
-        spawn_allocator_metrics_loop();
-    }
-    spawn_allocator_metrics_loop();
-
-    let mut node = args.node.create(config).await?;
-    let init_block_id = node.init(import_zerostate).await?;
-    node.update_validator_set(&init_block_id).await?;
+    archive_uploader
+        .upload_committed_archives(node.storage())
+        .await?;
 
     let rpc_state = node
         .create_rpc(&init_block_id)
@@ -73,12 +97,12 @@ async fn main() -> anyhow::Result<()> {
         ShardStateApplier::new(storage.clone(), (rpc_state.1, ps_subscriber))
     };
 
-    let storage = node.storage();
-    archive_uploader.upload_committed_archives(storage).await?;
-
-    let archive_handler = ArchiveHandler::new(storage.clone(), archive_uploader)?;
-    node.run((state_applier, archive_handler, rpc_state.0))
-        .await?;
+    let archive_handler = ArchiveHandler::new(node.storage().clone(), archive_uploader)?;
+    node.run(
+        archive_block_provider.chain((blockchain_block_provider, storage_block_provider)),
+        (state_applier, archive_handler, rpc_state.0),
+    )
+    .await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }
