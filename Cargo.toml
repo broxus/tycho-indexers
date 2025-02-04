@@ -11,16 +11,13 @@ anyhow = "1.0.93"
 bytes = "1.9.0"
 bytesize = { version = "1.3.0", features = ["serde"] }
 clap = { version = "4.5.20", features = ["derive"] }
-everscale-crypto = "0.3"
 everscale-types = { version = "0.1.2", features = ["tycho"] }
 hex = "0.4"
 humantime = "2"
 md5 = "0.7.0"
 object_store = "0.11"
 parking_lot = { version = "0.12.1" }
-rand = "0.8"
 scopeguard = "1.2"
-serde_json = "1.0.114"
 tokio = { version = "1.41.0", features = ["full"] }
 tracing = "0.1.40"
 tikv-jemalloc-ctl = { version = "0.6.0", features = ["stats"] }
@@ -32,12 +29,11 @@ tikv-jemallocator = { version = "0.6.0", features = [
 metrics = "0.23.0"
 metrics-exporter-prometheus = "0.15.0"
 
-tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "4e71caba3c09d48c276432f7527d8e5bfb6506f4" }
-tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "4e71caba3c09d48c276432f7527d8e5bfb6506f4" }
-tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "4e71caba3c09d48c276432f7527d8e5bfb6506f4" }
-tycho-network = { git = "https://github.com/broxus/tycho.git", rev = "4e71caba3c09d48c276432f7527d8e5bfb6506f4" }
-tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "4e71caba3c09d48c276432f7527d8e5bfb6506f4" }
-tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "4e71caba3c09d48c276432f7527d8e5bfb6506f4" }
+tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "7a26a535936035b4e123de163d2846fcf48b440c" }
+tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "7a26a535936035b4e123de163d2846fcf48b440c" }
+tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "7a26a535936035b4e123de163d2846fcf48b440c" }
+tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "7a26a535936035b4e123de163d2846fcf48b440c" }
+tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "7a26a535936035b4e123de163d2846fcf48b440c" }
 
 rayon = "1.10.0"
 serde = { version = "1.0.214", features = ["derive"] }
@@ -45,7 +41,7 @@ serde = { version = "1.0.214", features = ["derive"] }
 futures-util = "0.3.31"
 
 [patch.crates-io]
-everscale-types = { git = "https://github.com/broxus/everscale-types.git", rev = "0f2fb6900731f7e2b625b47f15dee57ef39eb2af" }
+everscale-types = { git = "https://github.com/broxus/everscale-types.git", rev = "69c344eac4e1f95d66b045ae90db904ad8afdfaf" }
 
 [profile.release]
 lto = true

@@ -6,7 +6,6 @@ use tycho_core::block_strider::{PsSubscriber, ShardStateApplier};
 use crate::config::UserConfig;
 use crate::provider::{ArchiveBlockProvider, ArchiveBlockProviderConfig};
 
-mod cli;
 mod config;
 mod provider;
 
@@ -16,10 +15,10 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[derive(Parser)]
 struct ExplorerArgs {
     #[clap(flatten)]
-    node: cli::CmdRun,
+    node: tycho_light_node::CmdRun,
 }
 
-type Config = config::NodeConfig<UserConfig>;
+type Config = tycho_light_node::NodeConfig<UserConfig>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -36,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
     let args = ExplorerArgs::parse();
 
     let config: Config =
-        config::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
+        tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
 
     let import_zerostate = args.node.import_zerostate.clone();
 
@@ -47,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut node = args.node.create(config.clone()).await?;
 
-    node.init(import_zerostate).await?;
+    node.init(import_zerostate, true).await?;
 
     let archive_block_provider =
         ArchiveBlockProvider::new(node.storage().clone(), ArchiveBlockProviderConfig {
