@@ -2,9 +2,10 @@ use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
 use tycho_core::block_strider::{
-    ArchiveBlockProvider, BlockProviderExt, BlockchainBlockProvider, PsSubscriber,
+    ArchiveBlockProvider, BlockProviderExt, BlockchainBlockProvider, ColdBootType, PsSubscriber,
     ShardStateApplier, StorageBlockProvider,
 };
+use tycho_util::cli::logger::init_logger;
 
 use crate::config::UserConfig;
 use crate::subscriber::{KafkaProducer, OptionalStateSubscriber};
@@ -40,6 +41,8 @@ async fn main() -> anyhow::Result<()> {
     let config: Config =
         tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
 
+    init_logger(&config.logger_config, args.node.logger_config.clone())?;
+
     let import_zerostate = args.node.import_zerostate.clone();
 
     let writer = match &config.user_config.kafka {
@@ -61,7 +64,9 @@ async fn main() -> anyhow::Result<()> {
     spawn_allocator_metrics_loop();
 
     let mut node = args.node.create(config.clone()).await?;
-    let init_block_id = node.init(import_zerostate, false).await?;
+    let init_block_id = node
+        .init(ColdBootType::LatestPersistent, import_zerostate)
+        .await?;
     node.update_validator_set(&init_block_id).await?;
 
     // Providers

@@ -1,7 +1,8 @@
 use anyhow::Context;
 use clap::Parser;
 use tikv_jemalloc_ctl::{epoch, stats};
-use tycho_core::block_strider::{PsSubscriber, ShardStateApplier};
+use tycho_core::block_strider::{ColdBootType, PsSubscriber, ShardStateApplier};
+use tycho_util::cli::logger::init_logger;
 
 use crate::config::UserConfig;
 use crate::provider::{ArchiveBlockProvider, ArchiveBlockProviderConfig};
@@ -37,6 +38,8 @@ async fn main() -> anyhow::Result<()> {
     let config: Config =
         tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
 
+    init_logger(&config.logger_config, args.node.logger_config.clone())?;
+
     let import_zerostate = args.node.import_zerostate.clone();
 
     if config.metrics.is_some() {
@@ -46,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut node = args.node.create(config.clone()).await?;
 
-    node.init(import_zerostate, true).await?;
+    node.init(ColdBootType::Genesis, import_zerostate).await?;
 
     let archive_block_provider =
         ArchiveBlockProvider::new(node.storage().clone(), ArchiveBlockProviderConfig {

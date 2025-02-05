@@ -1,6 +1,6 @@
 [package]
 name = "kafka-producer"
-version = "0.2.1+tychov-4e71cab"
+version = "0.2.2+tychov-532f921"
 edition = "2021"
 
 [dependencies]
@@ -13,9 +13,10 @@ tikv-jemallocator = { workspace = true }
 metrics = { workspace = true }
 metrics-exporter-prometheus = { workspace = true }
 
-tycho-light-node = { workspace = true }
 tycho-core = { workspace = true }
 tycho-block-util = { workspace = true }
+tycho-light-node = { workspace = true }
+tycho-util = { workspace = true }
 
 everscale-types = { workspace = true }
 
