@@ -9,10 +9,11 @@ use bytes::{BufMut, Bytes, BytesMut};
 use bytesize::ByteSize;
 use everscale_types::models::BlockId;
 use futures_util::future::BoxFuture;
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
 use object_store::{DynObjectStore, ObjectStore};
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::task::AbortHandle;
@@ -45,6 +46,14 @@ impl Default for ArchiveBlockProviderConfig {
 #[repr(transparent)]
 pub struct ArchiveBlockProvider {
     inner: Arc<Inner>,
+}
+
+impl Drop for Inner {
+    fn drop(&mut self) {
+        if let Some(handle) = self.archive_ids_task.take() {
+            handle.abort();
+        }
+    }
 }
 
 impl ArchiveBlockProvider {
@@ -81,17 +90,24 @@ impl ArchiveBlockProvider {
             ),
         };
 
+        let archive_ids: Arc<RwLock<BTreeMap<u32, usize>>> =
+            Arc::new(RwLock::new(Default::default()));
+
+        let mut res = Inner {
+            config,
+            storage,
+            s3_client,
+            archive_ids,
+            proof_checker,
+            archive_ids_task: None,
+            known_archives: Mutex::new(Default::default()),
+        };
+
+        res.archive_ids_task =
+            Some(tokio::spawn(res.make_downloader().update_archive_ids_task()).abort_handle());
+
         Ok(Self {
-            inner: Arc::new(Inner {
-                s3_client,
-
-                proof_checker,
-
-                known_archives: parking_lot::Mutex::new(Default::default()),
-
-                storage,
-                config,
-            }),
+            inner: Arc::new(res),
         })
     }
 
@@ -110,6 +126,7 @@ impl ArchiveBlockProvider {
 
             let Some(block_id) = info.archive.mc_block_ids.get(&next_mc_seqno) else {
                 tracing::error!(
+                    archive_id = archive_key,
                     "received archive does not contain mc block with seqno {next_mc_seqno}"
                 );
                 this.remove_archive_if_same(archive_key, &info);
@@ -190,9 +207,13 @@ struct Inner {
 
     proof_checker: ProofChecker,
 
-    known_archives: parking_lot::Mutex<ArchivesMap>,
+    archive_ids: Arc<RwLock<BTreeMap<u32, usize>>>,
+
+    known_archives: Mutex<ArchivesMap>,
 
     config: ArchiveBlockProviderConfig,
+
+    archive_ids_task: Option<AbortHandle>,
 }
 
 impl Inner {
@@ -285,6 +306,7 @@ impl Inner {
 
     fn make_downloader(&self) -> ArchiveDownloader {
         ArchiveDownloader {
+            archive_ids: self.archive_ids.clone(),
             s3_client: self.s3_client.clone(),
             storage: self.storage.clone(),
             memory_threshold: self.config.max_archive_to_memory_size,
@@ -342,6 +364,7 @@ struct ArchiveInfo {
 }
 
 struct ArchiveDownloader {
+    archive_ids: Arc<RwLock<BTreeMap<u32, usize>>>,
     s3_client: Arc<DynObjectStore>,
     storage: Storage,
     memory_threshold: ByteSize,
@@ -378,7 +401,7 @@ impl ArchiveDownloader {
                         break;
                     }
                     Err(e) => {
-                        tracing::error!(mc_seqno, "failed to preload archive {e}");
+                        tracing::error!("failed to preload: {e}");
                         tokio::time::sleep(INTERVAL).await;
                     }
                 }
@@ -393,29 +416,23 @@ impl ArchiveDownloader {
     }
 
     async fn try_download(&self, seqno: u32) -> Result<Option<ArchiveInfo>> {
-        let prefix = (seqno / 100).max(1);
-
-        let mut list_stream = self.s3_client.list(None).try_filter(|obj| {
-            futures_util::future::ready(
-                obj.location
-                    .as_ref()
-                    .starts_with(prefix.to_string().as_str()),
-            )
-        });
-
-        let mut archives = BTreeMap::new();
-        while let Some(item) = list_stream.next().await {
-            let object = item?;
-
-            let id: u32 = object.location.to_string().parse()?;
-            archives.insert(id, object.size);
-        }
-
-        let id = archives.range(..=seqno).next_back();
+        let id = self
+            .archive_ids
+            .read()
+            .range(..=seqno)
+            .next_back()
+            .map(|(k, v)| (*k, *v));
 
         let (id, size) = match id {
-            Some((id, size)) => (*id as _, NonZeroU64::new(*size as _).unwrap()),
-            None => anyhow::bail!("archive {seqno} too new"),
+            Some((id, size)) => {
+                const ARCHIVE_PACKAGE_SIZE: u32 = 100;
+
+                if seqno - id >= ARCHIVE_PACKAGE_SIZE {
+                    anyhow::bail!("archive too new")
+                }
+                (id as _, NonZeroU64::new(size as _).unwrap())
+            }
+            None => anyhow::bail!("archive not found"),
         };
 
         let writer = self.get_archive_writer(&size)?;
@@ -448,6 +465,8 @@ impl ArchiveDownloader {
     where
         W: Write + Send + 'static,
     {
+        tracing::debug!(mc_seqno, "downloading archive");
+
         let bytes = self
             .s3_client
             .get(&Path::from(mc_seqno.to_string()))
@@ -475,6 +494,46 @@ impl ArchiveDownloader {
         } else {
             ArchiveWriter::Bytes(BytesMut::new().writer())
         })
+    }
+
+    #[tracing::instrument(name = "update_archive_ids", skip_all)]
+    async fn update_archive_ids_task(self) {
+        tracing::info!("started");
+        scopeguard::defer! { tracing::info!("finished"); };
+
+        let mut offset = 0;
+
+        // Start polling archive ids
+        let mut interval = tokio::time::interval(Duration::from_secs(300));
+        loop {
+            let mut list_stream = self
+                .s3_client
+                .list_with_offset(None, &Path::from(offset.to_string()));
+
+            while let Some(item) = list_stream.next().await {
+                let object = match item {
+                    Ok(item) => item,
+                    Err(e) => {
+                        tracing::error!("failed to list S3 archives: {e}");
+                        break;
+                    }
+                };
+
+                let id = object
+                    .location
+                    .to_string()
+                    .parse::<u32>()
+                    .expect("invalid location");
+
+                self.archive_ids.write().insert(id, object.size);
+            }
+
+            if let Some((id, _)) = self.archive_ids.read().last_key_value() {
+                offset = *id;
+            }
+
+            interval.tick().await;
+        }
     }
 }
 
