@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut node = args.node.create(config.clone()).await?;
 
-    node.init(ColdBootType::Genesis, import_zerostate).await?;
+    let init_block_id = node.init(ColdBootType::Genesis, import_zerostate).await?;
 
     let archive_block_provider =
         ArchiveBlockProvider::new(node.storage().clone(), ArchiveBlockProviderConfig {
@@ -58,14 +58,21 @@ async fn main() -> anyhow::Result<()> {
             max_archive_to_memory_size: config.archive_block_provider.max_archive_to_memory_size,
         })?;
 
+    let rpc_state = node
+        .create_rpc(&init_block_id)
+        .await?
+        .map(|x| x.split())
+        .unzip();
+
     let state_applier = {
         let storage = node.storage();
         let ps_subscriber = PsSubscriber::new(storage.clone());
 
-        ShardStateApplier::new(storage.clone(), ps_subscriber)
+        ShardStateApplier::new(storage.clone(), (rpc_state.1, ps_subscriber))
     };
 
-    node.run(archive_block_provider, state_applier).await?;
+    node.run(archive_block_provider, (state_applier, rpc_state.0))
+        .await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }

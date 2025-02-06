@@ -428,11 +428,11 @@ impl ArchiveDownloader {
                 const ARCHIVE_PACKAGE_SIZE: u32 = 100;
 
                 if seqno - id >= ARCHIVE_PACKAGE_SIZE {
-                    anyhow::bail!("archive too new")
+                    anyhow::bail!("archive too new seqno = {seqno}")
                 }
                 (id as _, NonZeroU64::new(size as _).unwrap())
             }
-            None => anyhow::bail!("archive not found"),
+            None => anyhow::bail!("archive not found seqno = {seqno}"),
         };
 
         let writer = self.get_archive_writer(&size)?;
