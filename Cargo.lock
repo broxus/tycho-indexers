@@ -128,7 +128,7 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
 name = "archives-downloader"
-version = "0.2.2+tychov-532f921"
+version = "0.2.2+tychov-23e6417"
 dependencies = [
  "anyhow",
  "bytes",
@@ -136,12 +136,10 @@ dependencies = [
  "clap",
  "everscale-types",
  "futures-util",
- "metrics",
  "object_store",
  "parking_lot",
  "scopeguard",
  "serde",
- "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
  "tracing",
@@ -154,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "archives-uploader"
-version = "0.2.2+tychov-532f921"
+version = "0.2.2+tychov-23e6417"
 dependencies = [
  "anyhow",
  "bytesize",
@@ -167,7 +165,6 @@ dependencies = [
  "object_store",
  "scopeguard",
  "serde",
- "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
  "tracing",
@@ -1471,18 +1468,15 @@ dependencies = [
 
 [[package]]
 name = "kafka-producer"
-version = "0.2.2+tychov-532f921"
+version = "0.2.2+tychov-23e6417"
 dependencies = [
  "anyhow",
  "clap",
  "everscale-types",
  "futures-util",
- "metrics",
- "metrics-exporter-prometheus",
  "rayon",
  "rdkafka",
  "serde",
- "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
  "ton-block-compressor",
@@ -2530,9 +2524,9 @@ dependencies = [
 
 [[package]]
 name = "scc"
-version = "2.3.0"
+version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28e1c91382686d21b5ac7959341fcb9780fa7c03773646995a87c950fa7be640"
+checksum = "ea091f6cac2595aa38993f04f4ee692ed43757035c36e67c180b6828356385b1"
 dependencies = [
  "sdd",
 ]
@@ -3265,7 +3259,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 [[package]]
 name = "tycho-block-util"
 version = "0.2.2"
-source = "git+https://github.com/broxus/tycho.git#23e6417629f2ef29163e7f64ac0bde64aa48e182"
+source = "git+https://github.com/broxus/tycho.git#6f6d05ec959154903220b2d65bf8af5735197a1c"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3281,7 +3275,7 @@ dependencies = [
 [[package]]
 name = "tycho-core"
 version = "0.2.2"
-source = "git+https://github.com/broxus/tycho.git#23e6417629f2ef29163e7f64ac0bde64aa48e182"
+source = "git+https://github.com/broxus/tycho.git#6f6d05ec959154903220b2d65bf8af5735197a1c"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3310,7 +3304,7 @@ dependencies = [
 [[package]]
 name = "tycho-light-node"
 version = "0.2.2"
-source = "git+https://github.com/broxus/tycho.git#23e6417629f2ef29163e7f64ac0bde64aa48e182"
+source = "git+https://github.com/broxus/tycho.git#6f6d05ec959154903220b2d65bf8af5735197a1c"
 dependencies = [
  "anyhow",
  "clap",
@@ -3332,7 +3326,7 @@ dependencies = [
 [[package]]
 name = "tycho-network"
 version = "0.2.2"
-source = "git+https://github.com/broxus/tycho.git#23e6417629f2ef29163e7f64ac0bde64aa48e182"
+source = "git+https://github.com/broxus/tycho.git#6f6d05ec959154903220b2d65bf8af5735197a1c"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3371,7 +3365,7 @@ dependencies = [
 [[package]]
 name = "tycho-rpc"
 version = "0.2.2"
-source = "git+https://github.com/broxus/tycho.git#23e6417629f2ef29163e7f64ac0bde64aa48e182"
+source = "git+https://github.com/broxus/tycho.git#6f6d05ec959154903220b2d65bf8af5735197a1c"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3400,7 +3394,7 @@ dependencies = [
 [[package]]
 name = "tycho-storage"
 version = "0.2.2"
-source = "git+https://github.com/broxus/tycho.git#23e6417629f2ef29163e7f64ac0bde64aa48e182"
+source = "git+https://github.com/broxus/tycho.git#6f6d05ec959154903220b2d65bf8af5735197a1c"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3441,7 +3435,7 @@ dependencies = [
 [[package]]
 name = "tycho-util"
 version = "0.2.2"
-source = "git+https://github.com/broxus/tycho.git#23e6417629f2ef29163e7f64ac0bde64aa48e182"
+source = "git+https://github.com/broxus/tycho.git#6f6d05ec959154903220b2d65bf8af5735197a1c"
 dependencies = [
  "ahash",
  "anyhow",

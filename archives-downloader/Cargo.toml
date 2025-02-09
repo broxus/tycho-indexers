@@ -8,13 +8,11 @@ anyhow = { workspace = true }
 bytes = { workspace = true }
 bytesize = { workspace = true }
 clap = { workspace = true }
-metrics = { workspace = true }
 object_store = { workspace = true, features = ["aws", "gcp"] }
 parking_lot = { workspace = true }
 scopeguard = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-tikv-jemalloc-ctl = { workspace = true }
 tikv-jemallocator = { workspace = true }
 
 tycho-core = { workspace = true }
