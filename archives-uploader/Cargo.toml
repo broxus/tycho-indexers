@@ -15,7 +15,6 @@ object_store = { workspace = true, features = ["aws", "gcp"] }
 scopeguard = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-tikv-jemalloc-ctl = { workspace = true }
 tikv-jemallocator = { workspace = true }
 
 tycho-core = { workspace = true }
