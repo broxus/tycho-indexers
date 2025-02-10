@@ -416,6 +416,10 @@ impl ArchiveDownloader {
     }
 
     async fn try_download(&self, seqno: u32) -> Result<Option<ArchiveInfo>> {
+        if self.archive_ids.read().is_empty() {
+            anyhow::bail!("archive downloader not ready seqno = {seqno}")
+        }
+
         let id = self
             .archive_ids
             .read()
@@ -428,6 +432,8 @@ impl ArchiveDownloader {
                 const ARCHIVE_PACKAGE_SIZE: u32 = 100;
 
                 if seqno - id >= ARCHIVE_PACKAGE_SIZE {
+                    // tracing::warn!(seqno, "archive too new");
+                    // return Ok(None);
                     anyhow::bail!("archive too new seqno = {seqno}")
                 }
                 (id as _, NonZeroU64::new(size as _).unwrap())
