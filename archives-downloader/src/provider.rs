@@ -90,8 +90,17 @@ impl ArchiveBlockProvider {
             ),
         };
 
-        let archive_ids: Arc<RwLock<BTreeMap<u32, usize>>> =
-            Arc::new(RwLock::new(Default::default()));
+        // Preload archive ids
+        let archive_ids = {
+            let ids = storage
+                .block_storage()
+                .list_archive_ids()
+                .into_iter()
+                .map(|id| (id, 1usize))
+                .collect::<BTreeMap<u32, usize>>();
+
+            Arc::new(RwLock::new(ids))
+        };
 
         let mut res = Inner {
             config,
@@ -508,6 +517,9 @@ impl ArchiveDownloader {
         scopeguard::defer! { tracing::info!("finished"); };
 
         let mut offset = 0;
+        if let Some((id, _)) = self.archive_ids.read().last_key_value() {
+            offset = *id;
+        }
 
         // Start polling archive ids
         let mut interval = tokio::time::interval(Duration::from_secs(300));
