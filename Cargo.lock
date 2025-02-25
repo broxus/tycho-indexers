@@ -128,7 +128,7 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
 name = "archives-downloader"
-version = "0.2.2+tychov-ec56ab8a"
+version = "0.2.2+tychov-c0e5d154"
 dependencies = [
  "anyhow",
  "bytes",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "archives-uploader"
-version = "0.2.2+tychov-ec56ab8a"
+version = "0.2.2+tychov-c0e5d154"
 dependencies = [
  "anyhow",
  "bytesize",
@@ -1468,7 +1468,7 @@ dependencies = [
 
 [[package]]
 name = "kafka-producer"
-version = "0.2.2+tychov-ec56ab8a"
+version = "0.2.2+tychov-c0e5d154"
 dependencies = [
  "anyhow",
  "clap",
@@ -3258,8 +3258,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tycho-block-util"
-version = "0.2.3"
-source = "git+https://github.com/broxus/tycho.git?rev=ec56ab8aab773e7566a9951efc69dae85f1f5df4#ec56ab8aab773e7566a9951efc69dae85f1f5df4"
+version = "0.2.4"
+source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3274,8 +3274,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-core"
-version = "0.2.3"
-source = "git+https://github.com/broxus/tycho.git?rev=ec56ab8aab773e7566a9951efc69dae85f1f5df4#ec56ab8aab773e7566a9951efc69dae85f1f5df4"
+version = "0.2.4"
+source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3303,8 +3303,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-light-node"
-version = "0.2.3"
-source = "git+https://github.com/broxus/tycho.git?rev=ec56ab8aab773e7566a9951efc69dae85f1f5df4#ec56ab8aab773e7566a9951efc69dae85f1f5df4"
+version = "0.2.4"
+source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
 dependencies = [
  "anyhow",
  "clap",
@@ -3325,8 +3325,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-network"
-version = "0.2.3"
-source = "git+https://github.com/broxus/tycho.git?rev=ec56ab8aab773e7566a9951efc69dae85f1f5df4#ec56ab8aab773e7566a9951efc69dae85f1f5df4"
+version = "0.2.4"
+source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3364,8 +3364,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-rpc"
-version = "0.2.3"
-source = "git+https://github.com/broxus/tycho.git?rev=ec56ab8aab773e7566a9951efc69dae85f1f5df4#ec56ab8aab773e7566a9951efc69dae85f1f5df4"
+version = "0.2.4"
+source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3393,8 +3393,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-storage"
-version = "0.2.3"
-source = "git+https://github.com/broxus/tycho.git?rev=ec56ab8aab773e7566a9951efc69dae85f1f5df4#ec56ab8aab773e7566a9951efc69dae85f1f5df4"
+version = "0.2.4"
+source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3434,8 +3434,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-util"
-version = "0.2.3"
-source = "git+https://github.com/broxus/tycho.git?rev=ec56ab8aab773e7566a9951efc69dae85f1f5df4#ec56ab8aab773e7566a9951efc69dae85f1f5df4"
+version = "0.2.4"
+source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3443,7 +3443,6 @@ dependencies = [
  "bytes",
  "castaway",
  "dashmap",
- "everscale-types",
  "futures-util",
  "getip",
  "humantime",

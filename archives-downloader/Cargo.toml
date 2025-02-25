@@ -1,6 +1,6 @@
 [package]
 name = "archives-downloader"
-version = "0.2.2+tychov-ec56ab8a"
+version = "0.2.2+tychov-c0e5d154"
 edition = "2021"
 
 [dependencies]
