@@ -95,12 +95,12 @@ async fn main() -> anyhow::Result<()> {
         let storage = node.storage();
         let ps_subscriber = PsSubscriber::new(storage.clone());
 
-        ShardStateApplier::new(storage.clone(), (rpc_state.1, writer, ps_subscriber))
+        ShardStateApplier::new(storage.clone(), (rpc_state.1, ps_subscriber))
     };
 
     node.run(
         archive_block_provider.chain((blockchain_block_provider, storage_block_provider)),
-        (state_applier, rpc_state.0),
+        (writer, state_applier, rpc_state.0),
     )
     .await?;
 

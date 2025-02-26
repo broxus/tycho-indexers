@@ -9,7 +9,7 @@ use futures_util::{FutureExt, StreamExt};
 use rayon::prelude::*;
 use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use tycho_block_util::block::BlockStuff;
-use tycho_core::block_strider::{StateSubscriber, StateSubscriberContext};
+use tycho_core::block_strider::{BlockSubscriber, BlockSubscriberContext};
 
 use crate::config::KafkaConsumerConfig;
 
@@ -177,15 +177,25 @@ struct TransactionToKafka {
     timestamp: u32,
 }
 
-impl StateSubscriber for KafkaProducer {
-    type HandleStateFut<'a> = BoxFuture<'a, Result<()>>;
+impl BlockSubscriber for KafkaProducer {
+    type Prepared = ();
+    type PrepareBlockFut<'a> = BoxFuture<'a, Result<Self::Prepared>>;
+    type HandleBlockFut<'a> = futures_util::future::Ready<Result<()>>;
 
-    fn handle_state<'a>(&'a self, cx: &'a StateSubscriberContext) -> Self::HandleStateFut<'a> {
+    fn prepare_block<'a>(&'a self, cx: &'a BlockSubscriberContext) -> Self::PrepareBlockFut<'a> {
         async move {
             self.handle_block(&cx.block).await?;
             Ok(())
         }
         .boxed()
+    }
+
+    fn handle_block<'a>(
+        &'a self,
+        _: &'a BlockSubscriberContext,
+        _: Self::Prepared,
+    ) -> Self::HandleBlockFut<'a> {
+        futures_util::future::ready(Ok(()))
     }
 }
 
@@ -195,20 +205,25 @@ pub enum OptionalStateSubscriber {
     Blackhole,
 }
 
-impl StateSubscriber for OptionalStateSubscriber {
-    type HandleStateFut<'a> = futures_util::future::Either<
-        <KafkaProducer as StateSubscriber>::HandleStateFut<'a>,
-        futures_util::future::Ready<Result<()>>,
-    >;
+impl BlockSubscriber for OptionalStateSubscriber {
+    type Prepared = ();
+    type PrepareBlockFut<'a> = BoxFuture<'a, Result<Self::Prepared>>;
+    type HandleBlockFut<'a> = futures_util::future::Ready<Result<()>>;
 
-    fn handle_state<'a>(&'a self, cx: &'a StateSubscriberContext) -> Self::HandleStateFut<'a> {
+    fn prepare_block<'a>(&'a self, cx: &'a BlockSubscriberContext) -> Self::PrepareBlockFut<'a> {
         match self {
             OptionalStateSubscriber::KafkaProducer(producer) => {
-                futures_util::future::Either::Left(producer.handle_block(&cx.block).boxed())
+                producer.handle_block(&cx.block).boxed()
             }
-            OptionalStateSubscriber::Blackhole => {
-                futures_util::future::Either::Right(futures_util::future::ok(()))
-            }
+            OptionalStateSubscriber::Blackhole => futures_util::future::ok(()).boxed(),
         }
+    }
+
+    fn handle_block<'a>(
+        &'a self,
+        _: &'a BlockSubscriberContext,
+        _: Self::Prepared,
+    ) -> Self::HandleBlockFut<'a> {
+        futures_util::future::ready(Ok(()))
     }
 }
