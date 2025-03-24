@@ -199,7 +199,6 @@ impl BlockSubscriber for KafkaProducer {
     }
 }
 
-#[expect(clippy::large_enum_variant, reason = "doesn't matter")]
 pub enum OptionalStateSubscriber {
     KafkaProducer(KafkaProducer),
     Blackhole,

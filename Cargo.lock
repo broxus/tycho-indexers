@@ -128,7 +128,7 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
 name = "archives-downloader"
-version = "0.2.2+tychov-c0e5d154"
+version = "0.2.2+tychov-52c7f933"
 dependencies = [
  "anyhow",
  "bytes",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "archives-uploader"
-version = "0.2.2+tychov-c0e5d154"
+version = "0.2.2+tychov-52c7f933"
 dependencies = [
  "anyhow",
  "bytesize",
@@ -793,7 +793,7 @@ dependencies = [
 [[package]]
 name = "everscale-types"
 version = "0.1.2"
-source = "git+https://github.com/broxus/everscale-types.git?rev=adada6e6539abd798dbbc5a7fc1d17cc31fa7eff#adada6e6539abd798dbbc5a7fc1d17cc31fa7eff"
+source = "git+https://github.com/broxus/everscale-types.git?rev=90cd8f576e8cd3898e2524b70de8ad73aef8e3fd#90cd8f576e8cd3898e2524b70de8ad73aef8e3fd"
 dependencies = [
  "ahash",
  "base64",
@@ -811,12 +811,13 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.11",
  "tl-proto",
+ "typeid",
 ]
 
 [[package]]
 name = "everscale-types-proc"
 version = "0.1.5"
-source = "git+https://github.com/broxus/everscale-types.git?rev=adada6e6539abd798dbbc5a7fc1d17cc31fa7eff#adada6e6539abd798dbbc5a7fc1d17cc31fa7eff"
+source = "git+https://github.com/broxus/everscale-types.git?rev=90cd8f576e8cd3898e2524b70de8ad73aef8e3fd#90cd8f576e8cd3898e2524b70de8ad73aef8e3fd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1468,7 +1469,7 @@ dependencies = [
 
 [[package]]
 name = "kafka-producer"
-version = "0.2.2+tychov-c0e5d154"
+version = "0.2.2+tychov-52c7f933"
 dependencies = [
  "anyhow",
  "clap",
@@ -3258,8 +3259,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tycho-block-util"
-version = "0.2.4"
-source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
+version = "0.2.6"
+source = "git+https://github.com/broxus/tycho.git?rev=52c7f933acc3204af6567fe95549e44102407c66#52c7f933acc3204af6567fe95549e44102407c66"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3267,6 +3268,7 @@ dependencies = [
  "everscale-types",
  "hex",
  "parking_lot",
+ "rayon",
  "thiserror 2.0.11",
  "tl-proto",
  "tycho-util",
@@ -3274,8 +3276,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-core"
-version = "0.2.4"
-source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
+version = "0.2.6"
+source = "git+https://github.com/broxus/tycho.git?rev=52c7f933acc3204af6567fe95549e44102407c66#52c7f933acc3204af6567fe95549e44102407c66"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3303,8 +3305,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-light-node"
-version = "0.2.4"
-source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
+version = "0.2.6"
+source = "git+https://github.com/broxus/tycho.git?rev=52c7f933acc3204af6567fe95549e44102407c66#52c7f933acc3204af6567fe95549e44102407c66"
 dependencies = [
  "anyhow",
  "clap",
@@ -3325,8 +3327,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-network"
-version = "0.2.4"
-source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
+version = "0.2.6"
+source = "git+https://github.com/broxus/tycho.git?rev=52c7f933acc3204af6567fe95549e44102407c66#52c7f933acc3204af6567fe95549e44102407c66"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3364,8 +3366,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-rpc"
-version = "0.2.4"
-source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
+version = "0.2.6"
+source = "git+https://github.com/broxus/tycho.git?rev=52c7f933acc3204af6567fe95549e44102407c66#52c7f933acc3204af6567fe95549e44102407c66"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3393,8 +3395,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-storage"
-version = "0.2.4"
-source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
+version = "0.2.6"
+source = "git+https://github.com/broxus/tycho.git?rev=52c7f933acc3204af6567fe95549e44102407c66#52c7f933acc3204af6567fe95549e44102407c66"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3434,8 +3436,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-util"
-version = "0.2.4"
-source = "git+https://github.com/broxus/tycho.git?rev=c0e5d1549021a33f504822fe5b6253ceef8c5731#c0e5d1549021a33f504822fe5b6253ceef8c5731"
+version = "0.2.6"
+source = "git+https://github.com/broxus/tycho.git?rev=52c7f933acc3204af6567fe95549e44102407c66#52c7f933acc3204af6567fe95549e44102407c66"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3465,6 +3467,12 @@ dependencies = [
  "zstd-safe 7.2.1",
  "zstd-sys",
 ]
+
+[[package]]
+name = "typeid"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
 
 [[package]]
 name = "typenum"
