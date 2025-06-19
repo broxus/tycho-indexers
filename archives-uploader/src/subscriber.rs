@@ -261,6 +261,7 @@ impl ArchiveSubscriber for ArchiveUploader {
     }
 }
 
+#[expect(clippy::large_enum_variant, reason = "doesn't matter")]
 pub enum OptionalArchiveSubscriber {
     ArchiveUploader(ArchiveUploader),
     BlackHole,
