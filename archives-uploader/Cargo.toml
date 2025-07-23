@@ -1,7 +1,7 @@
 [package]
 name = "archives-uploader"
-version = "0.2.2+tychov-1536c79d"
-edition = "2021"
+version = "0.3.0+tychov-bbd3f13a"
+edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -19,7 +19,6 @@ tikv-jemallocator = { workspace = true }
 
 tycho-core = { workspace = true }
 tycho-light-node = { workspace = true }
-tycho-storage = { workspace = true }
 tycho-util = { workspace = true }
 
 serde = { workspace = true }

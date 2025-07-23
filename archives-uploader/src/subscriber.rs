@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use futures_util::future::BoxFuture;
 use futures_util::FutureExt;
+use futures_util::future::BoxFuture;
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
 use object_store::{DynObjectStore, ObjectStore, WriteMultipart};
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 use tycho_core::block_strider::{ArchiveSubscriber, ArchiveSubscriberContext};
-use tycho_storage::Storage;
+use tycho_core::storage::CoreStorage;
 use tycho_util::metrics::HistogramGuard;
 use tycho_util::sync::CancellationFlag;
 
@@ -61,7 +61,7 @@ impl ArchiveUploader {
     }
 
     // Finish upload last committed archives
-    async fn upload_committed_archives(&self, storage: &Storage) -> Result<()> {
+    async fn upload_committed_archives(&self, storage: &CoreStorage) -> Result<()> {
         let block_storage = storage.block_storage();
 
         let archive_ids = block_storage.list_archive_ids();
@@ -268,7 +268,7 @@ pub enum OptionalArchiveSubscriber {
 }
 
 impl OptionalArchiveSubscriber {
-    pub async fn upload_committed_archives(&self, storage: &Storage) -> Result<()> {
+    pub async fn upload_committed_archives(&self, storage: &CoreStorage) -> Result<()> {
         match self {
             OptionalArchiveSubscriber::ArchiveUploader(uploader) => {
                 uploader.upload_committed_archives(storage).await

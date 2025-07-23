@@ -1,4 +1,4 @@
-use std::collections::{btree_map, BTreeMap};
+use std::collections::{BTreeMap, btree_map};
 use std::io::{Seek, Write};
 use std::num::NonZeroU64;
 use std::sync::Arc;
@@ -7,9 +7,8 @@ use std::time::Duration;
 use anyhow::Result;
 use bytes::{BufMut, Bytes, BytesMut};
 use bytesize::ByteSize;
-use everscale_types::models::BlockId;
-use futures_util::future::BoxFuture;
 use futures_util::StreamExt;
+use futures_util::future::BoxFuture;
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
 use object_store::{DynObjectStore, ObjectStore};
@@ -20,7 +19,9 @@ use tokio::task::AbortHandle;
 use tycho_block_util::archive::{Archive, ArchiveVerifier};
 use tycho_block_util::block::{BlockIdRelation, BlockStuffAug};
 use tycho_core::block_strider::{BlockProvider, CheckProof, OptionalBlockStuff, ProofChecker};
-use tycho_storage::{MappedFile, Storage};
+use tycho_core::storage::CoreStorage;
+use tycho_storage::fs::MappedFile;
+use tycho_types::models::BlockId;
 
 use crate::config::ArchiveProviderConfig;
 
@@ -57,7 +58,7 @@ impl Drop for Inner {
 }
 
 impl ArchiveBlockProvider {
-    pub fn new(storage: Storage, config: ArchiveBlockProviderConfig) -> Result<Self> {
+    pub fn new(storage: CoreStorage, config: ArchiveBlockProviderConfig) -> Result<Self> {
         let proof_checker = ProofChecker::new(storage.clone());
 
         let s3_client: Arc<DynObjectStore> = match &config.s3_provider {
@@ -210,7 +211,7 @@ impl ArchiveBlockProvider {
 }
 
 struct Inner {
-    storage: Storage,
+    storage: CoreStorage,
 
     s3_client: Arc<DynObjectStore>,
 
@@ -375,7 +376,7 @@ struct ArchiveInfo {
 struct ArchiveDownloader {
     archive_ids: Arc<RwLock<BTreeMap<u32, usize>>>,
     s3_client: Arc<DynObjectStore>,
-    storage: Storage,
+    storage: CoreStorage,
     memory_threshold: ByteSize,
 }
 
@@ -504,7 +505,7 @@ impl ArchiveDownloader {
 
     fn get_archive_writer(&self, size: &NonZeroU64) -> Result<ArchiveWriter> {
         Ok(if size.get() > self.memory_threshold.as_u64() {
-            let file = self.storage.temp_file_storage().unnamed_file().open()?;
+            let file = self.storage.context().temp_files().unnamed_file().open()?;
             ArchiveWriter::File(std::io::BufWriter::new(file))
         } else {
             ArchiveWriter::Bytes(BytesMut::new().writer())

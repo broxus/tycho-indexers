@@ -1,7 +1,7 @@
 [package]
 name = "kafka-producer"
-version = "0.2.2+tychov-1536c79d"
-edition = "2021"
+version = "0.2.2+tychov-bbd3f13a"
+edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -15,7 +15,7 @@ tycho-block-util = { workspace = true }
 tycho-light-node = { workspace = true }
 tycho-util = { workspace = true }
 
-everscale-types = { workspace = true }
+tycho-types = { workspace = true }
 
 rayon = { workspace = true }
 

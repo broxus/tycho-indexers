@@ -1,8 +1,6 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use everscale_types::boc::BocRepr;
-use everscale_types::models::Transaction;
 use futures_util::future::BoxFuture;
 use futures_util::stream::FuturesOrdered;
 use futures_util::{FutureExt, StreamExt};
@@ -10,6 +8,8 @@ use rayon::prelude::*;
 use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use tycho_block_util::block::BlockStuff;
 use tycho_core::block_strider::{BlockSubscriber, BlockSubscriberContext};
+use tycho_types::boc::BocRepr;
+use tycho_types::models::Transaction;
 
 use crate::config::KafkaConsumerConfig;
 
@@ -199,7 +199,6 @@ impl BlockSubscriber for KafkaProducer {
     }
 }
 
-#[expect(clippy::large_enum_variant, reason = "doesn't matter")]
 pub enum OptionalStateSubscriber {
     KafkaProducer(KafkaProducer),
     Blackhole,

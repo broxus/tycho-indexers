@@ -6,24 +6,24 @@ set -e
 # --- Configuration ---
 # The git URL for tycho dependencies, used to identify the correct lines.
 TYCHO_GIT_URL="https://github.com/broxus/tycho.git"
-# The git URL for the everscale-types patch, used to identify the correct line.
-EVERSCALE_GIT_URL="https://github.com/broxus/everscale-types.git"
+# The git URL for the tycho-types patch, used to identify the correct line.
+TYCHO_TYPES_GIT_URL="https://github.com/broxus/tycho-types.git"
 
 
 # --- Argument Validation ---
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
-    echo "Usage: $0 <new_tycho_hash> [new_everscale_types_hash]"
+    echo "Usage: $0 <new_tycho_hash> [new_tycho_types_hash]"
     echo "  <new_tycho_hash>: The full git commit hash for tycho dependencies."
-    echo "  [new_everscale_types_hash]: (Optional) The full git commit hash for the everscale-types patch."
+    echo "  [new_tycho_types_hash]: (Optional) The full git commit hash for the tycho-types patch."
     echo
     echo "Example: $0 096de11a1a5b82261a87d383165b45f475f4d433 8f81e3a1b3c8f2b7e6d4c1e9a2b5d4e7f8a9b0c1"
     exit 1
 fi
 
 NEW_TYCHO_HASH="$1"
-NEW_EVERSCALE_HASH=""
+NEW_TYCHO_TYPES_HASH=""
 if [ "$#" -eq 2 ]; then
-    NEW_EVERSCALE_HASH="$2"
+    NEW_TYCHO_TYPES_HASH="$2"
 fi
 
 # Use the first 8 characters of the hash for the version metadata.
@@ -31,8 +31,8 @@ SHORT_TYCHO_HASH=${NEW_TYCHO_HASH:0:8}
 
 echo "New Tycho Hash: $NEW_TYCHO_HASH"
 echo "New Short Tycho Hash for versions: $SHORT_TYCHO_HASH"
-if [ -n "$NEW_EVERSCALE_HASH" ]; then
-    echo "New Everscale-Types Hash: $NEW_EVERSCALE_HASH"
+if [ -n "$NEW_TYCHO_TYPES_HASH" ]; then
+    echo "New Tycho-Types Hash: $NEW_TYCHO_TYPES_HASH"
 fi
 echo "--------------------------------------------------"
 
@@ -51,10 +51,10 @@ find . -name "Cargo.toml" -print0 | while IFS= read -r -d $'\0' cargo_file; do
         sed -i.bak -E "/${TYCHO_GIT_URL//\//\\/}/ s/rev = \"[0-9a-f]{40}\"/rev = \"$NEW_TYCHO_HASH\"/" "$cargo_file"
         echo "  -> Updated tycho dependencies rev."
 
-        # If the second hash was provided, update the everscale-types patch
-        if [ -n "$NEW_EVERSCALE_HASH" ]; then
-            sed -i.bak -E "/${EVERSCALE_GIT_URL//\//\\/}/ s/rev = \"[0-9a-f]{40}\"/rev = \"$NEW_EVERSCALE_HASH\"/" "$cargo_file"
-            echo "  -> Updated everscale-types patch rev."
+        # If the second hash was provided, update the tycho-types patch
+        if [ -n "$NEW_TYCHO_TYPES_HASH" ]; then
+            sed -i.bak -E "/${TYCHO_TYPES_GIT_URL//\//\\/}/ s/rev = \"[0-9a-f]{40}\"/rev = \"$NEW_TYCHO_TYPES_HASH\"/" "$cargo_file"
+            echo "  -> Updated tycho-types patch rev."
         fi
 
     # Check if the file is a package (member) Cargo.toml
