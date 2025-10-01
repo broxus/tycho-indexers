@@ -1,6 +1,6 @@
 [package]
 name = "archives-uploader"
-version = "0.3.0+tychov-bbd3f13a"
+version = "0.3.0+tychov-00e59baa"
 edition = "2024"
 
 [dependencies]

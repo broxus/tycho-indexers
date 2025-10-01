@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -6,7 +7,7 @@ use futures_util::future::BoxFuture;
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
 use object_store::{DynObjectStore, ObjectStore, WriteMultipart};
-use tokio::task::JoinHandle;
+use tokio::task::{JoinHandle, spawn_blocking};
 use tracing::Instrument;
 use tycho_core::block_strider::{ArchiveSubscriber, ArchiveSubscriberContext};
 use tycho_core::storage::CoreStorage;
@@ -14,6 +15,8 @@ use tycho_util::metrics::HistogramGuard;
 use tycho_util::sync::CancellationFlag;
 
 use crate::config::{ArchiveUploaderConfig, S3Provider};
+
+const ARCHIVE_READ_BUFFER_SIZE: usize = 100 * 1024 * 1024;
 
 pub struct ArchiveUploader {
     config: ArchiveUploaderConfig,
@@ -116,6 +119,7 @@ impl ArchiveUploader {
 
             async move {
                 let histogram = HistogramGuard::begin("tycho_uploader_upload_archive_time");
+                anyhow::ensure!(chunk_size > 0, "upload chunk size must be positive");
 
                 tracing::info!("started");
                 let guard = scopeguard::guard((), |_| {
@@ -165,29 +169,75 @@ impl ArchiveUploader {
                     let mut uploaded = 0;
 
                     let mut writer = WriteMultipart::new_with_chunk_size(upload, chunk_size);
-                    let mut iter = storage.block_storage().archive_chunks_iterator(archive_id);
-                    while iter.valid() {
+                    let mut reader = storage
+                        .block_storage()
+                        .get_archive_reader(archive_id)?
+                        .expect("we got notify for archive, so it should exist");
+                    let mut read_buffer = vec![0_u8; ARCHIVE_READ_BUFFER_SIZE];
+                    let mut part_hasher = md5::Context::new();
+                    let mut part_len = 0usize;
+
+                    loop {
                         anyhow::ensure!(!cancelled.check(), "task aborted");
 
-                        if let Err(e) = writer.wait_for_capacity(max_concurrency).await {
-                            tracing::error!(attempts, "failed to acquire upload capacity: {e}");
-                            tokio::time::sleep(retry_delay).await;
+                        let (reader_back, buffer_back, bytes_read) =
+                            spawn_blocking(move || -> Result<_, anyhow::Error> {
+                                let mut filled = 0usize;
+                                while filled < read_buffer.len() {
+                                    match reader.read(&mut read_buffer[filled..])? {
+                                        0 => break,
+                                        read => filled += read,
+                                    }
+                                }
+                                Ok((reader, read_buffer, filled))
+                            })
+                            .await??;
 
-                            continue 'upload_loop;
+                        reader = reader_back;
+                        read_buffer = buffer_back;
+
+                        if bytes_read == 0 {
+                            break;
                         }
 
-                        let chunk = iter.value().expect("shouldn't happen");
+                        let mut offset = 0;
+                        while offset < bytes_read {
+                            anyhow::ensure!(!cancelled.check(), "task aborted");
 
-                        // Write chunk
-                        writer.write(chunk);
+                            if part_len == 0
+                                && let Err(e) = writer.wait_for_capacity(max_concurrency).await
+                            {
+                                tracing::error!(attempts, "failed to acquire upload capacity: {e}");
+                                tokio::time::sleep(retry_delay).await;
 
-                        // Calculate MD5 chunk
-                        md5_buffer.extend_from_slice(md5::compute(chunk).as_slice());
+                                continue 'upload_loop;
+                            }
 
-                        uploaded += chunk.len();
+                            let remaining_in_part = chunk_size - part_len;
+                            let to_copy = (bytes_read - offset).min(remaining_in_part);
+                            let chunk_slice = &read_buffer[offset..offset + to_copy];
 
-                        // Next key
-                        iter.next();
+                            writer.write(chunk_slice);
+                            part_hasher.consume(chunk_slice);
+
+                            uploaded += chunk_slice.len();
+                            part_len += chunk_slice.len();
+                            offset += chunk_slice.len();
+
+                            if part_len == chunk_size {
+                                let digest =
+                                    std::mem::replace(&mut part_hasher, md5::Context::new())
+                                        .finalize();
+                                md5_buffer.extend_from_slice(digest.0.as_slice());
+                                part_len = 0;
+                            }
+                        }
+                    }
+
+                    if part_len > 0 {
+                        let digest =
+                            std::mem::replace(&mut part_hasher, md5::Context::new()).finalize();
+                        md5_buffer.extend_from_slice(digest.0.as_slice());
                     }
 
                     match writer.finish().await {
