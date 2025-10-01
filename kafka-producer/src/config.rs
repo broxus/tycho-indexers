@@ -50,6 +50,7 @@ pub enum SecurityConfig {
     Ssl(SslConfig),
 }
 
+#[cfg(feature = "ssl")]
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SslConfig {

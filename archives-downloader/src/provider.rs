@@ -22,6 +22,7 @@ use tycho_core::block_strider::{BlockProvider, CheckProof, OptionalBlockStuff, P
 use tycho_core::storage::CoreStorage;
 use tycho_storage::fs::MappedFile;
 use tycho_types::models::BlockId;
+use tycho_util::compression::ZstdDecompress;
 
 use crate::config::ArchiveProviderConfig;
 
@@ -452,11 +453,22 @@ impl ArchiveDownloader {
         };
 
         let writer = self.get_archive_writer(&size)?;
-        let writer = self.download_archive(id, writer).await?;
+        let compressed = self.download_archive(id).await?;
 
         let span = tracing::Span::current();
         tokio::task::spawn_blocking(move || {
             let _span = span.enter();
+
+            let mut writer = writer;
+            let mut decompressed = Vec::new();
+            ZstdDecompress::begin(compressed.as_ref())?.decompress(&mut decompressed)?;
+
+            let mut verifier = ArchiveVerifier::default();
+            verifier.write_verify(&decompressed)?;
+            verifier.final_check()?;
+
+            writer.write_all(&decompressed)?;
+            writer.flush()?;
 
             let bytes = writer.try_freeze()?;
 
@@ -477,10 +489,7 @@ impl ArchiveDownloader {
         .map(Some)
     }
 
-    pub async fn download_archive<W>(&self, mc_seqno: u64, mut output: W) -> Result<W>
-    where
-        W: Write + Send + 'static,
-    {
+    pub async fn download_archive(&self, mc_seqno: u64) -> Result<Bytes> {
         tracing::debug!(mc_seqno, "downloading archive");
 
         let bytes = self
@@ -490,17 +499,7 @@ impl ArchiveDownloader {
             .bytes()
             .await?;
 
-        let mut decompress = vec![];
-        tycho_util::compression::zstd_decompress(&bytes, &mut decompress)?;
-
-        let mut verifier = ArchiveVerifier::default();
-        verifier.write_verify(&decompress)?;
-        verifier.final_check()?;
-
-        output.write_all(&decompress)?;
-        output.flush()?;
-
-        Ok(output)
+        Ok(bytes)
     }
 
     fn get_archive_writer(&self, size: &NonZeroU64) -> Result<ArchiveWriter> {
@@ -544,7 +543,7 @@ impl ArchiveDownloader {
                     .parse::<u32>()
                     .expect("invalid location");
 
-                self.archive_ids.write().insert(id, object.size);
+                self.archive_ids.write().insert(id, object.size as usize);
             }
 
             if let Some((id, _)) = self.archive_ids.read().last_key_value() {
