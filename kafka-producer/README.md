@@ -1,4 +1,8 @@
-Example config:
+# Universal Tycho Indexer
+
+Stream transactions to Kafka
+
+## Config example:
 
 ```json
 {
