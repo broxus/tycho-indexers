@@ -50,14 +50,12 @@ async fn main() -> anyhow::Result<()> {
 
     let init_block_id = node.init(ColdBootType::Genesis, import_zerostate).await?;
 
-    let archive_block_provider = ArchiveBlockProvider::new(
-        node.storage().clone(),
-        ArchiveBlockProviderConfig {
+    let archive_block_provider =
+        ArchiveBlockProvider::new(node.storage().clone(), ArchiveBlockProviderConfig {
             bucket_name: config.user_config.bucket_name,
             s3_provider: config.user_config.s3_provider,
             max_archive_to_memory_size: config.archive_block_provider.max_archive_to_memory_size,
-        },
-    )?;
+        })?;
 
     let rpc_state = node
         .create_rpc(&init_block_id)
