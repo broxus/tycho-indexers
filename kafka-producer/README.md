@@ -66,8 +66,7 @@ Stream transactions to Kafka
   "storage": {
     "root_dir": "/var/node/db",
     "rocksdb_enable_metrics": false,
-    "rocksdb_lru_capacity": "32 GB",
-    "cells_cache_size": "4.3 GB"
+    "rocksdb_lru_capacity": "32 GB"
   },
   "blockchain_rpc_service": {
     "max_key_blocks_list_len": 8,
