@@ -4,6 +4,7 @@ members = ["archives-downloader", "archives-uploader", "kafka-producer"]
 
 [workspace.dependencies]
 anyhow = "1.0.93"
+async-trait = "0.1"
 bytes = "1.9.0"
 bytesize = { version = "1.3.0", features = ["serde"] }
 clap = { version = "4.5.20", features = ["derive"] }
@@ -11,7 +12,7 @@ tycho-types = { version = "0.3", features = ["tycho"] }
 hex = "0.4"
 humantime = "2"
 md5 = "0.8.0"
-object_store = "0.12.4"
+object_store = "0.12"
 parking_lot = { version = "0.12.1" }
 scopeguard = "1.2"
 tokio = { version = "1.41.0", features = ["full"] }
@@ -23,11 +24,11 @@ tikv-jemallocator = { version = "0.6.0", features = [
 ] }
 metrics = "0.24.2"
 
-tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
-tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
-tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
-tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
-tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
+tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "9d29fa5d940ca3582f55d62554f05b03ce48007c" }
+tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "9d29fa5d940ca3582f55d62554f05b03ce48007c" }
+tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "9d29fa5d940ca3582f55d62554f05b03ce48007c" }
+tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "9d29fa5d940ca3582f55d62554f05b03ce48007c" }
+tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "9d29fa5d940ca3582f55d62554f05b03ce48007c" }
 
 rayon = "1.10.0"
 serde = { version = "1.0.214", features = ["derive"] }
@@ -36,6 +37,7 @@ futures-util = "0.3.31"
 
 [patch.crates-io]
 # tycho-types = { git = "https://github.com/broxus/tycho-types.git", rev = "48a22d565482df8ef57e26071936572e5cbaec52" }
+object_store = { git = "https://github.com/broxus/arrow-rs-object-store.git", rev = "16cb2d45b1be785bdc92e09397bfaf0931f8607c" }
 
 [profile.release]
 lto = true
