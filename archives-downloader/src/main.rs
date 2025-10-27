@@ -1,14 +1,10 @@
 use anyhow::Context;
 use clap::Parser;
-use tycho_core::block_strider::{ColdBootType, PsSubscriber, ShardStateApplier};
+use tycho_core::block_strider::{
+    ArchiveBlockProvider, ColdBootType, PsSubscriber, ShardStateApplier,
+};
 use tycho_util::cli::logger::init_logger;
 use tycho_util::cli::metrics::spawn_allocator_metrics_loop;
-
-use crate::config::UserConfig;
-use crate::provider::{ArchiveBlockProvider, ArchiveBlockProviderConfig};
-
-mod config;
-mod provider;
 
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
@@ -19,7 +15,7 @@ struct ExplorerArgs {
     node: tycho_light_node::CmdRun,
 }
 
-type Config = tycho_light_node::NodeConfig<UserConfig>;
+type Config = tycho_light_node::NodeConfig<()>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -48,30 +44,32 @@ async fn main() -> anyhow::Result<()> {
 
     let mut node = args.node.create(config.clone()).await?;
 
-    let init_block_id = node.init(ColdBootType::Genesis, import_zerostate).await?;
+    let init_block_id = {
+        node.init(ColdBootType::LatestPersistent, import_zerostate, false)
+            .await?
+    };
+    node.update_validator_set(&init_block_id).await?;
 
-    let archive_block_provider =
-        ArchiveBlockProvider::new(node.storage().clone(), ArchiveBlockProviderConfig {
-            bucket_name: config.user_config.bucket_name,
-            s3_provider: config.user_config.s3_provider,
-            max_archive_to_memory_size: config.archive_block_provider.max_archive_to_memory_size,
-        })?;
+    // Providers
+    let s3_client = node
+        .s3_client()
+        .ok_or(anyhow::anyhow!("s3 client not initialized"))?;
 
-    let rpc_state = node
-        .create_rpc(&init_block_id)
-        .await?
-        .map(|x| x.split())
-        .unzip();
+    let archive_block_provider = ArchiveBlockProvider::new(
+        s3_client.clone(),
+        node.storage().clone(),
+        config.archive_block_provider.clone(),
+    );
 
+    // Subscribers
     let state_applier = {
         let storage = node.storage();
         let ps_subscriber = PsSubscriber::new(storage.clone());
-
-        ShardStateApplier::new(storage.clone(), (rpc_state.1, ps_subscriber))
+        ShardStateApplier::new(storage.clone(), ps_subscriber)
     };
 
-    node.run(archive_block_provider, (state_applier, rpc_state.0))
-        .await?;
+    // Run node
+    node.run(archive_block_provider, state_applier).await?;
 
     Ok(tokio::signal::ctrl_c().await?)
 }

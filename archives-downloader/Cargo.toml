@@ -5,27 +5,14 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
-bytes = { workspace = true }
-bytesize = { workspace = true }
 clap = { workspace = true }
-object_store = { workspace = true, features = ["aws", "gcp"] }
-parking_lot = { workspace = true }
-scopeguard = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tikv-jemallocator = { workspace = true }
 
-tycho-core = { workspace = true }
-tycho-block-util = { workspace = true }
-tycho-light-node = { workspace = true }
-tycho-storage = { workspace = true }
+tycho-core = { workspace = true, features = ["s3"] }
+tycho-light-node = { workspace = true, features = ["s3"] }
 tycho-util = { workspace = true }
-
-tycho-types = { workspace = true }
-
-serde = { workspace = true }
-
-futures-util = { workspace = true }
 
 [lints]
 workspace = true
