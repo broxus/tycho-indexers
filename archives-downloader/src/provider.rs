@@ -59,7 +59,7 @@ impl Drop for Inner {
 }
 
 impl ArchiveBlockProvider {
-    pub fn new(storage: CoreStorage, config: ArchiveBlockProviderConfig) -> Result<Self> {
+    pub async fn new(storage: CoreStorage, config: ArchiveBlockProviderConfig) -> Result<Self> {
         let proof_checker = ProofChecker::new(storage.clone());
 
         let s3_client: Arc<DynObjectStore> = match &config.s3_provider {
@@ -92,30 +92,20 @@ impl ArchiveBlockProvider {
             ),
         };
 
-        // Preload archive ids
-        let archive_ids = {
-            let ids = storage
-                .block_storage()
-                .list_archive_ids()
-                .into_iter()
-                .map(|id| (id, 1usize))
-                .collect::<BTreeMap<u32, usize>>();
-
-            Arc::new(RwLock::new(ids))
-        };
-
-        let mut res = Inner {
+        let res = Inner {
             config,
             storage,
             s3_client,
-            archive_ids,
             proof_checker,
             archive_ids_task: None,
+            archive_ids: Default::default(),
             known_archives: Mutex::new(Default::default()),
         };
 
-        res.archive_ids_task =
-            Some(tokio::spawn(res.make_downloader().update_archive_ids_task()).abort_handle());
+        res.make_downloader().preload_archive_ids().await;
+
+        // res.archive_ids_task =
+        //     Some(tokio::spawn(res.make_downloader().update_archive_ids_task()).abort_handle());
 
         Ok(Self {
             inner: Arc::new(res),
@@ -511,22 +501,39 @@ impl ArchiveDownloader {
         })
     }
 
+    async fn preload_archive_ids(&self) {
+        let mut list_stream = self.s3_client.list(None);
+
+        while let Some(item) = list_stream.next().await {
+            let object = match item {
+                Ok(item) => item,
+                Err(e) => {
+                    tracing::error!("failed to list S3 archives: {e}");
+                    break;
+                }
+            };
+
+            let id = object
+                .location
+                .to_string()
+                .parse::<u32>()
+                .expect("invalid location");
+
+            self.archive_ids.write().insert(id, object.size as usize);
+            tracing::info!(id, "loaded archive id");
+        }
+    }
+
+    #[allow(dead_code)]
     #[tracing::instrument(name = "update_archive_ids", skip_all)]
     async fn update_archive_ids_task(self) {
         tracing::info!("started");
         scopeguard::defer! { tracing::info!("finished"); };
 
-        let mut offset = 0;
-        if let Some((id, _)) = self.archive_ids.read().last_key_value() {
-            offset = *id;
-        }
-
         // Start polling archive ids
         let mut interval = tokio::time::interval(Duration::from_secs(300));
         loop {
-            let mut list_stream = self
-                .s3_client
-                .list_with_offset(None, &Path::from(offset.to_string()));
+            let mut list_stream = self.s3_client.list(None);
 
             while let Some(item) = list_stream.next().await {
                 let object = match item {
@@ -544,10 +551,6 @@ impl ArchiveDownloader {
                     .expect("invalid location");
 
                 self.archive_ids.write().insert(id, object.size as usize);
-            }
-
-            if let Some((id, _)) = self.archive_ids.read().last_key_value() {
-                offset = *id;
             }
 
             interval.tick().await;
