@@ -1,22 +1,20 @@
-use std::io::Read;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
 use object_store::{DynObjectStore, ObjectStore, WriteMultipart};
-use tokio::task::{JoinHandle, spawn_blocking};
+use tokio::task::JoinHandle;
 use tracing::Instrument;
 use tycho_core::block_strider::{ArchiveSubscriber, ArchiveSubscriberContext};
-use tycho_core::storage::CoreStorage;
+use tycho_core::storage::{BlockStorage, CoreStorage};
 use tycho_util::metrics::HistogramGuard;
 use tycho_util::sync::CancellationFlag;
 
 use crate::config::{ArchiveUploaderConfig, S3Provider};
-
-const ARCHIVE_READ_BUFFER_SIZE: usize = 100 * 1024 * 1024;
+use crate::subscribers::CHUNK_SIZE;
 
 pub struct ArchiveUploader {
     config: ArchiveUploaderConfig,
@@ -64,7 +62,7 @@ impl ArchiveUploader {
     }
 
     // Finish upload last committed archives
-    async fn upload_committed_archives(&self, storage: &CoreStorage) -> Result<()> {
+    pub async fn upload_committed_archives(&self, storage: &CoreStorage) -> Result<()> {
         let block_storage = storage.block_storage();
 
         let archive_ids = block_storage.list_archive_ids();
@@ -108,7 +106,6 @@ impl ArchiveUploader {
             let location = cx.archive_id.to_string();
 
             let retry_delay = self.config.retry_delay;
-            let chunk_size = self.config.chunk_size.as_u64() as _;
             let max_concurrency = self.config.max_concurrency;
             let enable_duplication = self.config.enable_duplication;
 
@@ -119,7 +116,6 @@ impl ArchiveUploader {
 
             async move {
                 let histogram = HistogramGuard::begin("tycho_uploader_upload_archive_time");
-                anyhow::ensure!(chunk_size > 0, "upload chunk size must be positive");
 
                 tracing::info!("started");
                 let guard = scopeguard::guard((), |_| {
@@ -144,9 +140,17 @@ impl ArchiveUploader {
                     }
                 }
 
+                // Get archive info
+                let archive_size = storage
+                    .block_storage()
+                    .get_archive_size(archive_id)?
+                    .context("archive not found")?;
+
+                let chunk_size = BlockStorage::DEFAULT_BLOB_CHUNK_SIZE.get() as usize;
+
                 let mut attempts = 0;
 
-                // Block the strider until we successfully upload
+                // Block until we successfully upload
                 'upload_loop: loop {
                     attempts += 1;
                     tracing::info!(attempt = attempts, "starting upload archive");
@@ -163,47 +167,46 @@ impl ArchiveUploader {
                         }
                     };
 
-                    // Buffer for MD5 hashes for all chunks
+                    // Buffer for MD5 hashes for all S3 parts
                     let mut md5_buffer = vec![];
 
                     let mut uploaded = 0;
+                    let mut offset = 0u64;
 
-                    let mut writer = WriteMultipart::new_with_chunk_size(upload, chunk_size);
-                    let mut reader = storage
-                        .block_storage()
-                        .get_archive_reader(archive_id)?
-                        .expect("we got notify for archive, so it should exist");
-                    let mut read_buffer = vec![0_u8; ARCHIVE_READ_BUFFER_SIZE];
-                    let mut part_hasher = md5::Context::new();
+                    let mut writer = WriteMultipart::new_with_chunk_size(upload, CHUNK_SIZE);
+
                     let mut part_len = 0usize;
+                    let mut part_hasher = md5::Context::new();
 
-                    loop {
+                    // Read archive in chunks and accumulate into S3 parts
+                    while offset < archive_size as u64 {
                         anyhow::ensure!(!cancelled.check(), "task aborted");
 
-                        let (reader_back, buffer_back, bytes_read) =
-                            spawn_blocking(move || -> Result<_, anyhow::Error> {
-                                let mut filled = 0usize;
-                                while filled < read_buffer.len() {
-                                    match reader.read(&mut read_buffer[filled..])? {
-                                        0 => break,
-                                        read => filled += read,
-                                    }
-                                }
-                                Ok((reader, read_buffer, filled))
-                            })
-                            .await??;
+                        // Read chunk from archive storage
+                        let archive_chunk = match storage
+                            .block_storage()
+                            .get_archive_chunk(archive_id, offset)
+                            .await
+                        {
+                            Ok(chunk) => chunk,
+                            Err(e) => {
+                                tracing::error!(
+                                    attempts,
+                                    offset,
+                                    "failed to read archive chunk: {e}"
+                                );
+                                tokio::time::sleep(retry_delay).await;
 
-                        reader = reader_back;
-                        read_buffer = buffer_back;
+                                continue 'upload_loop;
+                            }
+                        };
 
-                        if bytes_read == 0 {
-                            break;
-                        }
-
-                        let mut offset = 0;
-                        while offset < bytes_read {
+                        // Process the chunk byte by byte, accumulating into S3 parts
+                        let mut chunk_offset = 0;
+                        while chunk_offset < archive_chunk.len() {
                             anyhow::ensure!(!cancelled.check(), "task aborted");
 
+                            // Wait for capacity before starting a new S3 part
                             if part_len == 0
                                 && let Err(e) = writer.wait_for_capacity(max_concurrency).await
                             {
@@ -213,18 +216,21 @@ impl ArchiveUploader {
                                 continue 'upload_loop;
                             }
 
-                            let remaining_in_part = chunk_size - part_len;
-                            let to_copy = (bytes_read - offset).min(remaining_in_part);
-                            let chunk_slice = &read_buffer[offset..offset + to_copy];
+                            let remaining_in_part = CHUNK_SIZE - part_len;
+                            let remaining_in_chunk = archive_chunk.len() - chunk_offset;
 
-                            writer.write(chunk_slice);
-                            part_hasher.consume(chunk_slice);
+                            let to_copy = remaining_in_chunk.min(remaining_in_part);
 
-                            uploaded += chunk_slice.len();
-                            part_len += chunk_slice.len();
-                            offset += chunk_slice.len();
+                            let slice = &archive_chunk[chunk_offset..chunk_offset + to_copy];
 
-                            if part_len == chunk_size {
+                            writer.write(slice);
+                            part_hasher.consume(slice);
+
+                            part_len += slice.len();
+                            chunk_offset += slice.len();
+
+                            // If we filled the S3 part, finalize it
+                            if part_len == CHUNK_SIZE {
                                 let digest =
                                     std::mem::replace(&mut part_hasher, md5::Context::new())
                                         .finalize();
@@ -232,8 +238,14 @@ impl ArchiveUploader {
                                 part_len = 0;
                             }
                         }
+
+                        uploaded += archive_chunk.len();
+
+                        // Next archive chunk
+                        offset += chunk_size as u64;
                     }
 
+                    // Finalize the last partial part if any
                     if part_len > 0 {
                         let digest =
                             std::mem::replace(&mut part_hasher, md5::Context::new()).finalize();
@@ -264,7 +276,7 @@ impl ArchiveUploader {
                             tokio::time::sleep(retry_delay).await;
                         }
                         Err(e) => {
-                            tracing::error!(attempts, "failed to complete upload archive: {e}");
+                            tracing::error!(attempts, "failed to complete upload archive: {e:?}");
                             tokio::time::sleep(retry_delay).await;
                         }
                     }
@@ -315,17 +327,6 @@ impl ArchiveSubscriber for ArchiveUploader {
 pub enum OptionalArchiveSubscriber {
     ArchiveUploader(ArchiveUploader),
     BlackHole,
-}
-
-impl OptionalArchiveSubscriber {
-    pub async fn upload_committed_archives(&self, storage: &CoreStorage) -> Result<()> {
-        match self {
-            OptionalArchiveSubscriber::ArchiveUploader(uploader) => {
-                uploader.upload_committed_archives(storage).await
-            }
-            OptionalArchiveSubscriber::BlackHole => Ok(()),
-        }
-    }
 }
 
 impl ArchiveSubscriber for OptionalArchiveSubscriber {

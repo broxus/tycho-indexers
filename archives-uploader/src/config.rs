@@ -6,7 +6,8 @@ use tycho_util::serde_helpers;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct UserConfig {
-    pub s3_uploader: Option<ArchiveUploaderConfig>,
+    pub s3_archive_uploader: Option<ArchiveUploaderConfig>,
+    pub s3_state_uploader: Option<StateUploaderConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -30,6 +31,48 @@ pub struct ArchiveUploaderConfig {
     #[serde(default = "default_retry_delay", with = "serde_helpers::humantime")]
     pub retry_delay: Duration,
 
+    /// Max concurrency uploading tasks.
+    #[serde(default = "default_max_concurrency")]
+    pub max_concurrency: usize,
+
+    /// Enable duplication data in S3.
+    ///
+    /// Default: false.
+    #[serde(default = "default_enable_duplication")]
+    pub enable_duplication: bool,
+
+    /// Number of recent archives to re-upload
+    #[serde(default = "default_last_archives_to_upload")]
+    pub last_archives_to_upload: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StateUploaderConfig {
+    /// S3 bucket name.
+    ///
+    /// Default: 'archives'.
+    #[serde(default = "default_bucket_name")]
+    pub bucket_name: String,
+
+    /// S3 location prefix.
+    ///
+    /// Default: 'states'.
+    #[serde(default)]
+    pub location: Option<String>,
+
+    /// S3 provider.
+    ///
+    /// Default: GCS
+    #[serde(default)]
+    pub provider: S3Provider,
+
+    /// Timeout to retry upload.
+    ///
+    /// Default: 1 seconds.
+    #[serde(default = "default_retry_delay", with = "serde_helpers::humantime")]
+    pub retry_delay: Duration,
+
     /// Upload chunk size.
     ///
     /// Default: 10 MB.
@@ -39,10 +82,6 @@ pub struct ArchiveUploaderConfig {
     /// Max concurrency uploading tasks.
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: usize,
-
-    /// Number of recent archives to re-upload
-    #[serde(default = "default_last_archives_to_upload")]
-    pub last_archives_to_upload: usize,
 
     /// Enable duplication data in S3.
     ///

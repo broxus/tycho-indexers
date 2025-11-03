@@ -64,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut node = args.node.create(config.clone()).await?;
     let init_block_id = node
-        .init(ColdBootType::LatestPersistent, import_zerostate)
+        .init(ColdBootType::LatestPersistent, import_zerostate, None)
         .await?;
     node.update_validator_set(&init_block_id).await?;
 

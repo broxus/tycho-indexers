@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 bytesize = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
@@ -17,6 +18,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tikv-jemallocator = { workspace = true }
 
+tycho-types = { workspace = true }
 tycho-core = { workspace = true }
 tycho-light-node = { workspace = true }
 tycho-util = { workspace = true }

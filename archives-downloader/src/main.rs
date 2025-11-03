@@ -47,7 +47,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let mut node = args.node.create(config.clone()).await?;
-    let _init_block_id = node.init(ColdBootType::Genesis, import_zerostate).await?;
+    let _init_block_id = node
+        .init(ColdBootType::Genesis, import_zerostate, None)
+        .await?;
 
     let archive_block_provider =
         ArchiveBlockProvider::new(node.storage().clone(), ArchiveBlockProviderConfig {
