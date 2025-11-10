@@ -402,7 +402,7 @@ impl ArchiveDownloader {
                         break;
                     }
                     Err(e) => {
-                        tracing::error!("failed to preload: {e}");
+                        tracing::error!(mc_seqno, "failed to preload archive {e}");
                         tokio::time::sleep(INTERVAL).await;
                     }
                 }
@@ -479,12 +479,12 @@ impl ArchiveDownloader {
         .map(Some)
     }
 
-    pub async fn download_archive(&self, mc_seqno: u64) -> Result<Bytes> {
-        tracing::debug!(mc_seqno, "downloading archive");
+    pub async fn download_archive(&self, archive_id: u64) -> Result<Bytes> {
+        tracing::debug!(archive_id, "downloading archive");
 
         let bytes = self
             .s3_client
-            .get(&Path::from(mc_seqno.to_string()))
+            .get(&Path::from(archive_id.to_string()))
             .await?
             .bytes()
             .await?;

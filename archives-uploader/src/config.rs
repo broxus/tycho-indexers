@@ -55,12 +55,6 @@ pub struct StateUploaderConfig {
     #[serde(default = "default_bucket_name")]
     pub bucket_name: String,
 
-    /// S3 location prefix.
-    ///
-    /// Default: 'states'.
-    #[serde(default)]
-    pub location: Option<String>,
-
     /// S3 provider.
     ///
     /// Default: GCS

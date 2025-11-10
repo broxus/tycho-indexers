@@ -156,6 +156,7 @@ version = "0.3.0+tychov-00e59baa"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bytes",
  "bytesize",
  "clap",
  "futures-util",
@@ -171,7 +172,6 @@ dependencies = [
  "tracing",
  "tycho-core",
  "tycho-light-node",
- "tycho-types",
  "tycho-util",
 ]
 
@@ -3442,7 +3442,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 [[package]]
 name = "tycho-block-util"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3461,7 +3461,7 @@ dependencies = [
 [[package]]
 name = "tycho-core"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3480,6 +3480,7 @@ dependencies = [
  "humantime",
  "metrics",
  "moka",
+ "object_store",
  "parking_lot",
  "parking_lot_core",
  "pin-project-lite",
@@ -3522,7 +3523,7 @@ dependencies = [
 [[package]]
 name = "tycho-light-node"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "anyhow",
  "clap",
@@ -3544,7 +3545,7 @@ dependencies = [
 [[package]]
 name = "tycho-network"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3584,7 +3585,7 @@ dependencies = [
 [[package]]
 name = "tycho-rpc"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3620,7 +3621,7 @@ dependencies = [
 [[package]]
 name = "tycho-storage"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3643,7 +3644,7 @@ dependencies = [
 [[package]]
 name = "tycho-storage-traits"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "bytes",
  "smallvec",
@@ -3692,7 +3693,7 @@ dependencies = [
 [[package]]
 name = "tycho-util"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3732,7 +3733,7 @@ dependencies = [
 [[package]]
 name = "tycho-util-proc"
 version = "0.3.3"
-source = "git+https://github.com/broxus/tycho.git?rev=a6b2987c24ecf8023941fbebd25a6bf95c365ec1#a6b2987c24ecf8023941fbebd25a6bf95c365ec1"
+source = "git+https://github.com/broxus/tycho.git?rev=ac4816630932ba1a8222120bf555a527ff06b5c4#ac4816630932ba1a8222120bf555a527ff06b5c4"
 dependencies = [
  "proc-macro2",
  "quote",

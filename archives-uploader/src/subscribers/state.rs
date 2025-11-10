@@ -1,19 +1,17 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Context;
+use bytes::Bytes;
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
 use object_store::{DynObjectStore, ObjectStore, WriteMultipart};
-use tokio::task::JoinHandle;
-use tracing::Instrument;
-use tycho_core::block_strider::{PsCompletionContext, PsCompletionHandler, PsCompletionSubscriber};
+use tycho_core::block_strider::{
+    PsCompletionContext, PsCompletionHandler, PsCompletionSubscriber, S3FileKind,
+};
 use tycho_core::storage::{CoreStorage, PersistentStateKind};
-use tycho_types::models::BlockId;
 use tycho_util::metrics::HistogramGuard;
-use tycho_util::sync::CancellationFlag;
 
 use crate::config::{S3Provider, StateUploaderConfig};
 use crate::subscribers::CHUNK_SIZE;
@@ -21,7 +19,6 @@ use crate::subscribers::CHUNK_SIZE;
 pub struct StateUploader {
     config: StateUploaderConfig,
     s3_storage: Arc<DynObjectStore>,
-    prev_archive_upload: tokio::sync::Mutex<Option<UploadStateTask>>,
 }
 
 impl StateUploader {
@@ -56,246 +53,442 @@ impl StateUploader {
             ),
         };
 
-        Ok(StateUploader {
-            config,
-            s3_storage,
-            prev_archive_upload: Default::default(),
-        })
+        Ok(StateUploader { config, s3_storage })
     }
 
     async fn on_state_persisted(&self, cx: &PsCompletionContext<'_>) -> anyhow::Result<()> {
-        tracing::info!(block_id = ?cx.block_id, "on_state_persisted");
+        let labels = [("workchain", cx.block_id.shard.workchain().to_string())];
 
-        let mut prev_archive_upload = self.prev_archive_upload.lock().await;
+        let histogram = HistogramGuard::begin("tycho_uploader_upload_persistent_state_time");
 
-        // NOTE: Wait on reference to make sure that the task is cancel safe
-        if let Some(task) = &mut *prev_archive_upload {
-            // Wait upload archive
-            task.finish().await?;
-        }
-        *prev_archive_upload = Some(self.spawn_upload_state(cx));
+        tracing::info!("started");
+        let guard = scopeguard::guard((), |_| {
+            tracing::warn!("cancelled");
+        });
+
+        // Upload persistent state to S3
+        self.upload_state(cx).await?;
+
+        // Upload block data to S3
+        self.upload_block_data(&cx).await?;
+
+        // Upload block proof to S3
+        self.upload_block_proof(&cx).await?;
+
+        // Upload queue diff to S3
+        self.upload_queue_diff(&cx).await?;
+
+        metrics::gauge!("tycho_uploader_last_uploaded_state_seqno", &labels)
+            .set(cx.block_id.seqno as f64);
+
+        // Done
+        scopeguard::ScopeGuard::into_inner(guard);
+        tracing::info!(
+            elapsed = %humantime::format_duration(histogram.finish()),
+            "finished"
+        );
 
         Ok(())
     }
 
-    fn spawn_upload_state(&self, cx: &PsCompletionContext<'_>) -> UploadStateTask {
-        let cancelled = CancellationFlag::new();
+    async fn upload_state(&self, cx: &PsCompletionContext<'_>) -> anyhow::Result<()> {
+        let kind = match cx.kind {
+            PersistentStateKind::Shard => "Persistent Shard State",
+            PersistentStateKind::Queue => "Persistent Queue State",
+        };
 
-        let handle = tokio::task::spawn({
-            let block_id = *cx.block_id;
-            let kind = cx.kind;
+        let location = match cx.kind {
+            PersistentStateKind::Shard => S3FileKind::ShardState.make_path(&cx.block_id),
+            PersistentStateKind::Queue => S3FileKind::QueueState.make_path(&cx.block_id),
+        };
 
-            let location = if let Some(prefix) = &self.config.location {
-                PathBuf::from(prefix).join(cx.kind.make_file_name(cx.block_id))
-            } else {
-                cx.kind.make_file_name(cx.block_id)
+        if !self.config.enable_duplication {
+            if check_exists(&self.s3_storage, &location, kind).await? {
+                return Ok(());
+            }
+        }
+
+        let state_info = cx
+            .storage
+            .persistent_state_storage()
+            .get_state_info(&cx.block_id, cx.kind)
+            .context("persistent state not found")?;
+
+        let total_size = state_info.size.get();
+        let chunk_size = state_info.chunk_size.get() as usize;
+
+        let mut attempts = 0;
+
+        // Block until we successfully upload
+        'upload_loop: loop {
+            attempts += 1;
+            tracing::info!(attempt = attempts, "starting upload {kind}");
+
+            let upload = match self
+                .s3_storage
+                .put_multipart(&Path::from(location.display().to_string()))
+                .await
+            {
+                Ok(upload) => upload,
+                Err(e) => {
+                    tracing::error!(attempts, "failed to initialize multipart upload: {e}");
+                    tokio::time::sleep(self.config.retry_delay).await;
+                    continue;
+                }
             };
 
-            let retry_delay = self.config.retry_delay;
-            let max_concurrency = self.config.max_concurrency;
-            let enable_duplication = self.config.enable_duplication;
+            // Buffer for MD5 hashes for all chunks
+            let mut md5_buffer = vec![];
 
-            let storage = cx.storage.clone();
-            let s3_storage = self.s3_storage.clone();
+            let mut uploaded = 0;
+            let mut offset = 0u64;
 
-            let cancelled = cancelled.clone();
+            let mut writer = WriteMultipart::new_with_chunk_size(upload, CHUNK_SIZE);
 
-            async move {
-                let labels = [("workchain", block_id.shard.workchain().to_string())];
+            let mut part_len = 0usize;
+            let mut part_hasher = md5::Context::new();
 
-                let histogram =
-                    HistogramGuard::begin("tycho_uploader_upload_persistent_state_time");
-
-                tracing::info!("started");
-                let guard = scopeguard::guard((), |_| {
-                    tracing::warn!("cancelled");
-                });
-
-                // Check state existence before upload to S3
-                if !enable_duplication {
-                    match s3_storage
-                        .head(&Path::from(location.to_string_lossy().as_ref()))
-                        .await
-                    {
-                        Ok(meta) => {
-                            tracing::info!(?meta, "state already exists, skipping upload");
-                            return Ok(());
-                        }
-                        Err(object_store::Error::NotFound { path, .. }) => {
-                            tracing::info!(path, "state not found, starting upload");
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "error checking persistent state existence: {e}, starting upload"
-                            );
-                        }
-                    }
-                }
-
-                let state_info = storage
+            // Read state in chunks and write to S3
+            while offset < total_size {
+                // Read chunk from persistent state storage
+                let state_chunk = match cx
+                    .storage
                     .persistent_state_storage()
-                    .get_state_info(&block_id, kind)
-                    .context("state not found")?;
+                    .read_state_part(&cx.block_id, offset, cx.kind)
+                    .await
+                {
+                    Some(chunk) => chunk,
+                    None => {
+                        tracing::error!(attempts, offset, "failed to read state part");
+                        tokio::time::sleep(self.config.retry_delay).await;
 
-                let total_size = state_info.size.get();
-                let chunk_size = state_info.chunk_size.get() as usize;
+                        continue 'upload_loop;
+                    }
+                };
 
-                let mut attempts = 0;
-
-                // Block until we successfully upload
-                'upload_loop: loop {
-                    attempts += 1;
-                    tracing::info!(attempt = attempts, "starting upload state");
-
-                    let upload = match s3_storage
-                        .put_multipart(&Path::from(location.to_string_lossy().as_ref()))
-                        .await
+                // Process the chunk byte by byte, accumulating into S3 parts
+                let mut chunk_offset = 0;
+                while chunk_offset < state_chunk.len() {
+                    // Wait for capacity before starting a new S3 part
+                    if part_len == 0
+                        && let Err(e) = writer.wait_for_capacity(self.config.max_concurrency).await
                     {
-                        Ok(upload) => upload,
-                        Err(e) => {
-                            tracing::error!(attempts, "failed to initialize multipart upload: {e}");
-                            tokio::time::sleep(retry_delay).await;
-                            continue;
-                        }
-                    };
+                        tracing::error!(attempts, "failed to acquire upload capacity: {e}");
+                        tokio::time::sleep(self.config.retry_delay).await;
 
-                    // Buffer for MD5 hashes for all chunks
-                    let mut md5_buffer = vec![];
-
-                    let mut uploaded = 0;
-                    let mut offset = 0u64;
-
-                    let mut writer = WriteMultipart::new_with_chunk_size(upload, CHUNK_SIZE);
-
-                    let mut part_len = 0usize;
-                    let mut part_hasher = md5::Context::new();
-
-                    // Read state in chunks and write to S3
-                    while offset < total_size {
-                        anyhow::ensure!(!cancelled.check(), "task aborted");
-
-                        // Read chunk from persistent state storage
-                        let state_chunk = match storage
-                            .persistent_state_storage()
-                            .read_state_part(&block_id, offset, kind)
-                            .await
-                        {
-                            Some(chunk) => chunk,
-                            None => {
-                                tracing::error!(attempts, offset, "failed to read state part");
-                                tokio::time::sleep(retry_delay).await;
-
-                                continue 'upload_loop;
-                            }
-                        };
-
-                        // Process the chunk byte by byte, accumulating into S3 parts
-                        let mut chunk_offset = 0;
-                        while chunk_offset < state_chunk.len() {
-                            anyhow::ensure!(!cancelled.check(), "task aborted");
-
-                            // Wait for capacity before starting a new S3 part
-                            if part_len == 0
-                                && let Err(e) = writer.wait_for_capacity(max_concurrency).await
-                            {
-                                tracing::error!(attempts, "failed to acquire upload capacity: {e}");
-                                tokio::time::sleep(retry_delay).await;
-
-                                continue 'upload_loop;
-                            }
-
-                            let remaining_in_part = CHUNK_SIZE - part_len;
-                            let remaining_in_chunk = state_chunk.len() - chunk_offset;
-
-                            let to_copy = remaining_in_chunk.min(remaining_in_part);
-
-                            let slice = &state_chunk[chunk_offset..chunk_offset + to_copy];
-
-                            writer.write(slice);
-                            part_hasher.consume(slice);
-
-                            part_len += slice.len();
-                            chunk_offset += slice.len();
-
-                            // If we filled the S3 part, finalize it
-                            if part_len == CHUNK_SIZE {
-                                let digest =
-                                    std::mem::replace(&mut part_hasher, md5::Context::new())
-                                        .finalize();
-                                md5_buffer.extend_from_slice(digest.0.as_slice());
-                                part_len = 0;
-                            }
-                        }
-
-                        uploaded += state_chunk.len();
-
-                        // Next storage chunk
-                        offset += chunk_size as u64;
+                        continue 'upload_loop;
                     }
 
-                    // Finalize the last partial part if any
-                    if part_len > 0 {
+                    let remaining_in_part = CHUNK_SIZE - part_len;
+                    let remaining_in_chunk = state_chunk.len() - chunk_offset;
+
+                    let to_copy = remaining_in_chunk.min(remaining_in_part);
+
+                    let slice = &state_chunk[chunk_offset..chunk_offset + to_copy];
+
+                    writer.write(slice);
+                    part_hasher.consume(slice);
+
+                    part_len += slice.len();
+                    chunk_offset += slice.len();
+
+                    // If we filled the S3 part, finalize it
+                    if part_len == CHUNK_SIZE {
                         let digest =
                             std::mem::replace(&mut part_hasher, md5::Context::new()).finalize();
                         md5_buffer.extend_from_slice(digest.0.as_slice());
-                    }
-
-                    match writer.finish().await {
-                        Ok(result) => {
-                            let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
-
-                            if result.e_tag.as_deref().is_some_and(|tag| {
-                                tag.trim_matches('"').starts_with(&expected_etag)
-                            }) {
-                                tracing::info!("upload state completed successfully");
-
-                                metrics::histogram!("tycho_uploader_state_size", &labels)
-                                    .record(uploaded as f64);
-
-                                break;
-                            }
-
-                            tracing::error!(
-                                attempt = attempts,
-                                expected = expected_etag,
-                                received = ?result.e_tag,
-                                "ETag mismatch detected"
-                            );
-                            tokio::time::sleep(retry_delay).await;
-                        }
-                        Err(e) => {
-                            tracing::error!(attempts, "failed to complete upload state: {e:?}");
-                            tokio::time::sleep(retry_delay).await;
-                        }
+                        part_len = 0;
                     }
                 }
 
-                metrics::gauge!("tycho_uploader_last_uploaded_state_seqno", &labels)
-                    .set(block_id.seqno as f64);
+                uploaded += state_chunk.len();
 
-                // Done
-                scopeguard::ScopeGuard::into_inner(guard);
-                tracing::info!(
-                    attempts,
-                    elapsed = %humantime::format_duration(histogram.finish()),
-                    "finished"
-                );
-
-                Ok(())
+                // Next storage chunk
+                offset += chunk_size as u64;
             }
-            .instrument(tracing::info_span!(
-                "spawn_upload_state",
-                block_id = ?cx.block_id,
-                kind = ?cx.kind,
-            ))
-        });
 
-        UploadStateTask {
-            cancelled,
-            kind: cx.kind,
-            block_id: *cx.block_id,
-            handle: Some(handle),
+            // Finalize the last partial part if any
+            if part_len > 0 {
+                let digest = std::mem::replace(&mut part_hasher, md5::Context::new()).finalize();
+                md5_buffer.extend_from_slice(digest.0.as_slice());
+            }
+
+            match writer.finish().await {
+                Ok(result) => {
+                    let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
+
+                    if result
+                        .e_tag
+                        .as_deref()
+                        .is_some_and(|tag| tag.trim_matches('"').starts_with(&expected_etag))
+                    {
+                        tracing::info!(block_id = ?cx.block_id, uploaded, "upload {kind} completed successfully");
+                        break;
+                    }
+
+                    tracing::error!(
+                        attempt = attempts,
+                        expected = expected_etag,
+                        received = ?result.e_tag,
+                        "ETag mismatch detected"
+                    );
+                    tokio::time::sleep(self.config.retry_delay).await;
+                }
+                Err(e) => {
+                    tracing::error!(attempts, "failed to complete upload {kind}: {e:?}");
+                    tokio::time::sleep(self.config.retry_delay).await;
+                }
+            }
         }
+
+        Ok(())
+    }
+
+    async fn upload_block_data(&self, cx: &PsCompletionContext<'_>) -> anyhow::Result<()> {
+        let kind = "Block Data";
+        let location = S3FileKind::BlockData.make_path(&cx.block_id);
+
+        if !self.config.enable_duplication {
+            if check_exists(&self.s3_storage, &location, kind).await? {
+                return Ok(());
+            }
+        }
+
+        let handle = cx
+            .storage
+            .block_handle_storage()
+            .load_handle(&cx.block_id)
+            .context("block handle not found")?;
+
+        let total_size = cx
+            .storage
+            .block_storage()
+            .get_compressed_block_data_size(&handle)?
+            .context("block data not found")?;
+
+        let mut attempts = 0;
+
+        // Block until we successfully upload
+        'upload_loop: loop {
+            attempts += 1;
+            tracing::info!(attempt = attempts, "starting upload {kind}");
+
+            let upload = match self
+                .s3_storage
+                .put_multipart(&Path::from(location.display().to_string()))
+                .await
+            {
+                Ok(upload) => upload,
+                Err(e) => {
+                    tracing::error!(attempts, "failed to initialize multipart upload: {e}");
+                    tokio::time::sleep(self.config.retry_delay).await;
+                    continue;
+                }
+            };
+
+            // Buffer for MD5 hashes for all chunks
+            let mut md5_buffer = vec![];
+
+            let mut uploaded = 0;
+            let mut offset = 0u64;
+
+            let mut writer = WriteMultipart::new_with_chunk_size(upload, CHUNK_SIZE);
+
+            // Read state in chunks and write to S3
+            while offset < total_size {
+                // Wait for capacity before starting a new S3 part
+                if let Err(e) = writer.wait_for_capacity(self.config.max_concurrency).await {
+                    tracing::error!(attempts, "failed to acquire upload capacity: {e}");
+                    tokio::time::sleep(self.config.retry_delay).await;
+
+                    continue 'upload_loop;
+                }
+
+                // Read chunk from archive storage
+                let chunk = match cx
+                    .storage
+                    .block_storage()
+                    .load_block_data_range(&handle, offset, CHUNK_SIZE as u64)
+                    .await
+                {
+                    Ok(Some(chunk)) => chunk,
+                    Ok(None) => anyhow::bail!("block data not found"),
+                    Err(e) => {
+                        tracing::error!(attempts, offset, "failed to load {kind}: {e}");
+                        tokio::time::sleep(self.config.retry_delay).await;
+
+                        continue 'upload_loop;
+                    }
+                };
+
+                // Write chunk to S3
+                writer.write(&chunk);
+
+                // Calculate MD5 chunk
+                md5_buffer.extend_from_slice(md5::compute(&chunk).as_slice());
+
+                uploaded += chunk.len();
+
+                // Next chunk
+                offset += CHUNK_SIZE as u64;
+            }
+
+            match writer.finish().await {
+                Ok(result) => {
+                    let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
+
+                    if result
+                        .e_tag
+                        .as_deref()
+                        .is_some_and(|tag| tag.trim_matches('"').starts_with(&expected_etag))
+                    {
+                        tracing::info!(block_id = ?cx.block_id, uploaded, "upload {kind} completed successfully");
+                        break;
+                    }
+
+                    tracing::error!(
+                        attempt = attempts,
+                        expected = expected_etag,
+                        received = ?result.e_tag,
+                        "ETag mismatch detected"
+                    );
+                    tokio::time::sleep(self.config.retry_delay).await;
+                }
+                Err(e) => {
+                    tracing::error!(attempts, "failed to complete upload {kind}: {e:?}");
+                    tokio::time::sleep(self.config.retry_delay).await;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn upload_block_proof(&self, cx: &PsCompletionContext<'_>) -> anyhow::Result<()> {
+        let location = S3FileKind::BlockProof.make_path(&cx.block_id);
+        let handle = cx
+            .storage
+            .block_handle_storage()
+            .load_handle(&cx.block_id)
+            .context("block handle not found")?;
+
+        let data = cx
+            .storage
+            .block_storage()
+            .load_block_proof_raw(&handle)
+            .await?;
+
+        self.upload_bytes_data(cx, data, "Block Proof", location)
+            .await
+    }
+
+    async fn upload_queue_diff(&self, cx: &PsCompletionContext<'_>) -> anyhow::Result<()> {
+        let location = S3FileKind::QueueDiff.make_path(&cx.block_id);
+        let handle = cx
+            .storage
+            .block_handle_storage()
+            .load_handle(&cx.block_id)
+            .context("block handle not found")?;
+
+        let data = cx
+            .storage
+            .block_storage()
+            .load_queue_diff_raw(&handle)
+            .await?;
+
+        self.upload_bytes_data(cx, data, "Queue Diff", location)
+            .await
+    }
+
+    async fn upload_bytes_data(
+        &self,
+        cx: &PsCompletionContext<'_>,
+        data: Bytes,
+        kind: &str,
+        location: std::path::PathBuf,
+    ) -> anyhow::Result<()> {
+        if !self.config.enable_duplication {
+            if check_exists(&self.s3_storage, &location, kind).await? {
+                return Ok(());
+            }
+        }
+
+        let total_size = data.len() as u64;
+        let mut attempts = 0;
+
+        'upload_loop: loop {
+            attempts += 1;
+            tracing::info!(attempt = attempts, "starting upload {kind}");
+
+            let upload = match self
+                .s3_storage
+                .put_multipart(&Path::from(location.display().to_string()))
+                .await
+            {
+                Ok(upload) => upload,
+                Err(e) => {
+                    tracing::error!(attempts, "failed to initialize multipart upload: {e}");
+                    tokio::time::sleep(self.config.retry_delay).await;
+                    continue;
+                }
+            };
+
+            let mut md5_buffer = vec![];
+            let mut uploaded = 0;
+            let mut offset = 0u64;
+
+            let mut writer = WriteMultipart::new_with_chunk_size(upload, CHUNK_SIZE);
+
+            while offset < total_size {
+                if let Err(e) = writer.wait_for_capacity(self.config.max_concurrency).await {
+                    tracing::error!(attempts, "failed to acquire upload capacity: {e}");
+                    tokio::time::sleep(self.config.retry_delay).await;
+                    continue 'upload_loop;
+                }
+
+                let end = (offset + CHUNK_SIZE as u64).min(total_size);
+                let chunk = data.slice(offset as usize..end as usize);
+
+                writer.write(&chunk);
+                md5_buffer.extend_from_slice(md5::compute(&chunk).as_slice());
+
+                uploaded += chunk.len();
+                offset += CHUNK_SIZE as u64;
+            }
+
+            match writer.finish().await {
+                Ok(result) => {
+                    let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
+
+                    if result
+                        .e_tag
+                        .as_deref()
+                        .is_some_and(|tag| tag.trim_matches('"').starts_with(&expected_etag))
+                    {
+                        tracing::info!(
+                            block_id = ?cx.block_id,
+                            uploaded,
+                            "upload {kind} completed successfully",
+                        );
+                        break;
+                    }
+
+                    tracing::error!(
+                        attempt = attempts,
+                        expected = expected_etag,
+                        received = ?result.e_tag,
+                        "ETag mismatch detected"
+                    );
+                    tokio::time::sleep(self.config.retry_delay).await;
+                }
+                Err(e) => {
+                    tracing::error!(attempts, "failed to complete upload {kind}: {e:?}");
+                    tokio::time::sleep(self.config.retry_delay).await;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     // Finish uploading the last state if not yet
@@ -314,7 +507,7 @@ impl StateUploader {
                         block_id: handle.id(),
                         kind: PersistentStateKind::Shard,
                     };
-                    self.spawn_upload_state(&cx).finish().await?;
+                    self.on_state_persisted(&cx).await?;
                 }
 
                 if handle.has_persistent_queue_state() {
@@ -323,7 +516,7 @@ impl StateUploader {
                         block_id: handle.id(),
                         kind: PersistentStateKind::Queue,
                     };
-                    self.spawn_upload_state(&cx).finish().await?;
+                    self.on_state_persisted(&cx).await?;
                 }
             }
         }
@@ -393,46 +586,26 @@ impl PsCompletionHandler for OptionalStateSubscriber {
     }
 }
 
-struct UploadStateTask {
-    block_id: BlockId,
-    kind: PersistentStateKind,
-    cancelled: CancellationFlag,
-    handle: Option<JoinHandle<anyhow::Result<()>>>,
-}
-
-impl UploadStateTask {
-    async fn finish(&mut self) -> anyhow::Result<()> {
-        // NOTE: Await on reference to make sure that the task is cancel safe
-        if let Some(handle) = &mut self.handle {
-            if let Err(e) = handle
-                .await
-                .map_err(|e| {
-                    if e.is_panic() {
-                        std::panic::resume_unwind(e.into_panic());
-                    }
-                    anyhow::Error::from(e)
-                })
-                .and_then(std::convert::identity)
-            {
-                tracing::error!(
-                    block_id = ?self.block_id,
-                    kind = ?self.kind,
-                    "failed to upload state: {e:?}"
-                );
-            }
-
-            self.handle = None;
+async fn check_exists(
+    s3_storage: &Arc<DynObjectStore>,
+    location: &std::path::PathBuf,
+    kind: &str,
+) -> anyhow::Result<bool> {
+    match s3_storage
+        .head(&Path::from(location.display().to_string()))
+        .await
+    {
+        Ok(meta) => {
+            tracing::info!(?meta, "{} already exists, skipping upload", kind);
+            Ok(true)
         }
-
-        Ok(())
-    }
-}
-
-impl Drop for UploadStateTask {
-    fn drop(&mut self) {
-        self.cancelled.cancel();
-        if let Some(handle) = &self.handle {
-            handle.abort();
+        Err(object_store::Error::NotFound { path, .. }) => {
+            tracing::info!(path, "{} not found, starting upload", kind);
+            Ok(false)
+        }
+        Err(e) => {
+            tracing::error!("error checking {} existence: {e}, starting upload", kind);
+            Ok(false)
         }
     }
 }
