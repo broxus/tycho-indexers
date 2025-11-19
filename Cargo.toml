@@ -23,11 +23,11 @@ tikv-jemallocator = { version = "0.6.0", features = [
 ] }
 metrics = "0.24.2"
 
-tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "433d287811abd7de2c67e12db41e9c5df51995d7" }
-tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "433d287811abd7de2c67e12db41e9c5df51995d7" }
-tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "433d287811abd7de2c67e12db41e9c5df51995d7" }
-tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "433d287811abd7de2c67e12db41e9c5df51995d7" }
-tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "433d287811abd7de2c67e12db41e9c5df51995d7" }
+tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
+tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
+tycho-light-node = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
+tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
+tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "7b6e584bfca19c7003072adb01c4361bf86e6164" }
 
 rayon = "1.10.0"
 serde = { version = "1.0.214", features = ["derive"] }
