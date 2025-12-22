@@ -1,6 +1,6 @@
 [package]
 name = "kafka-producer"
-version = "0.2.2+tychov-6d2f73ea"
+version = "0.2.2+tychov-837e8086"
 edition = "2024"
 
 [dependencies]
@@ -10,10 +10,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tikv-jemallocator = { workspace = true }
 
-tycho-core = { workspace = true }
+tycho-core = { workspace = true, features = ["cli"] }
 tycho-block-util = { workspace = true }
-tycho-light-node = { workspace = true }
-tycho-util = { workspace = true }
 
 tycho-types = { workspace = true }
 
@@ -25,6 +23,7 @@ rdkafka = { version = "0.36.2", features = ["tokio"] }
 futures-util = { workspace = true }
 
 ton-block-compressor = { git = "https://github.com/broxus/ton-block-compressor.git" }
+tycho-core-bridge = { workspace = true }
 
 [features]
 ssl = ["rdkafka/ssl-vendored"]

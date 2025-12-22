@@ -1,11 +1,9 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use clap::Parser;
 use tycho_core::block_strider::{
-    ArchiveBlockProvider, ArchiveHandler, BlockProviderExt, BlockchainBlockProvider, ColdBootType,
-    PsSubscriber, ShardStateApplier, StorageBlockProvider,
+    ArchiveHandler, BlockStrider, MetricsSubscriber, ShardStateApplier,
 };
-use tycho_util::cli::logger::init_logger;
-use tycho_util::cli::metrics::spawn_allocator_metrics_loop;
+use tycho_core::node::CmdRunArgs;
 
 use crate::config::UserConfig;
 use crate::subscribers::{
@@ -21,118 +19,74 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[derive(Parser)]
 struct ExplorerArgs {
     #[clap(flatten)]
-    node: tycho_light_node::CmdRun,
+    node: CmdRunArgs,
 }
 
-type Config = tycho_light_node::NodeConfig<UserConfig>;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    std::panic::set_hook(Box::new(|info| {
-        use std::io::Write;
-        let backtrace = std::backtrace::Backtrace::capture();
-
-        tracing::error!("{info}\n{backtrace}");
-        std::io::stderr().flush().ok();
-        std::io::stdout().flush().ok();
-        std::process::exit(1);
-    }));
-
+fn main() -> Result<()> {
     let args = ExplorerArgs::parse();
 
-    let config: Config =
-        tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
+    tycho_core_bridge::run_node(
+        args.node,
+        true,
+        |ctx: tycho_core_bridge::RunContext<UserConfig>| async move {
+            let tycho_core_bridge::RunContext {
+                node,
+                config,
+                storage,
+                strider_state,
+                rpc_blocks,
+                rpc_states,
+                s3_client,
+                ..
+            } = ctx;
 
-    init_logger(&config.logger_config, args.node.logger_config.clone())?;
+            let s3_client =
+                s3_client.ok_or_else(|| anyhow::anyhow!("s3 client not initialized"))?;
 
-    let import_zerostate = args.node.import_zerostate.clone();
+            let uploader = match &config.user_config.uploader {
+                None => {
+                    tracing::warn!("Starting without archive uploader");
+                    OptionalArchiveSubscriber::BlackHole
+                }
+                Some(config) => {
+                    let uploader = ArchiveUploader::new(config.clone(), s3_client.clone())
+                        .context("failed to create archive uploader")?;
+                    uploader.upload_committed_archives(&storage).await?;
+                    OptionalArchiveSubscriber::ArchiveUploader(uploader)
+                }
+            };
+            let handler = ArchiveHandler::new(storage.clone(), uploader)?;
 
-    if config.metrics.is_some() {
-        spawn_allocator_metrics_loop();
-    }
+            let applier = ShardStateApplier::new(storage.clone(), rpc_states);
 
-    let mut node = args.node.create(config.clone()).await?;
+            let mut state_uploader = match &config.user_config.uploader {
+                None => {
+                    tracing::warn!("Starting without state uploader");
+                    OptionalStateUploader::BlackHole
+                }
+                Some(config) => {
+                    let uploader =
+                        StateUploader::new(config.clone(), storage.clone(), s3_client.clone())
+                            .context("failed to create state uploader")?;
 
-    let init_block_id = {
-        node.init(ColdBootType::LatestPersistent, import_zerostate, false)
-            .await?
-    };
-    node.update_validator_set(&init_block_id).await?;
+                    OptionalStateUploader::StateUploader(uploader)
+                }
+            };
+            state_uploader.run()?;
 
-    // Providers
-    let archive_block_provider = ArchiveBlockProvider::new(
-        node.blockchain_rpc_client().clone(),
-        node.storage().clone(),
-        config.archive_block_provider.clone(),
-    );
+            let provider = tycho_core_bridge::standard_provider_chain(
+                storage.clone(),
+                node.blockchain_rpc_client.clone(),
+                config.base.archive_block_provider.clone(),
+                config.base.blockchain_block_provider.clone(),
+            );
+            let strider = BlockStrider::builder()
+                .with_provider(provider)
+                .with_state(strider_state)
+                .with_block_subscriber((applier, handler, rpc_blocks, MetricsSubscriber))
+                .build();
 
-    let storage_block_provider = StorageBlockProvider::new(node.storage().clone());
-
-    let blockchain_block_provider = BlockchainBlockProvider::new(
-        node.blockchain_rpc_client().clone(),
-        node.storage().clone(),
-        config.blockchain_block_provider.clone(),
+            Ok(strider)
+        },
     )
-    .with_fallback(archive_block_provider.clone());
-
-    // Subscribers
-    let rpc_state = node
-        .create_rpc(&init_block_id)
-        .await?
-        .map(|x| x.split())
-        .unzip();
-
-    let s3_client = node
-        .s3_client()
-        .ok_or(anyhow::anyhow!("s3 client not initialized"))?;
-
-    let archive_uploader = match &config.user_config.uploader {
-        None => {
-            tracing::warn!("Starting without archive uploader");
-            OptionalArchiveSubscriber::BlackHole
-        }
-        Some(c) => {
-            let uploader = ArchiveUploader::new(c.clone(), s3_client.clone())
-                .context("failed to create archive uploader")?;
-            uploader.upload_committed_archives(node.storage()).await?;
-            OptionalArchiveSubscriber::ArchiveUploader(uploader)
-        }
-    };
-    let archive_handler = ArchiveHandler::new(node.storage().clone(), archive_uploader)?;
-
-    let state_applier = {
-        let storage = node.storage();
-        let ps_subscriber = PsSubscriber::new(storage.clone());
-        ShardStateApplier::new(storage.clone(), (rpc_state.1, ps_subscriber))
-    };
-
-    // State uploader not included in block strider and running separately
-    let mut state_uploader = match &config.user_config.uploader {
-        None => {
-            tracing::warn!("Starting without state uploader");
-            OptionalStateUploader::BlackHole
-        }
-        Some(config) => {
-            let uploader =
-                StateUploader::new(config.clone(), node.storage().clone(), s3_client.clone())
-                    .context("failed to create state uploader")?;
-
-            OptionalStateUploader::StateUploader(uploader)
-        }
-    };
-    state_uploader.run()?;
-
-    // Run node
-    node.run(
-        archive_block_provider.chain((blockchain_block_provider, storage_block_provider)),
-        (state_applier, archive_handler, rpc_state.0),
-    )
-    .await?;
-
-    tokio::signal::ctrl_c().await?;
-
-    // Graceful shutdown
-    state_uploader.stop();
-
-    Ok(())
 }
