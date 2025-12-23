@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use object_store::{ObjectStore, WriteMultipart};
-use tycho_core::s3::S3Client;
 use tycho_core::storage::{CoreStorage, PersistentState};
+use tycho_core_bridge::S3Client;
 use tycho_util::metrics::HistogramGuard;
 
 use crate::config::UploaderConfig;

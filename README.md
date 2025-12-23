@@ -1,11 +1,11 @@
 # Tycho Indexers
 
-A set of indexers for the Tycho network built on top of
-the [Tycho Light Node](https://github.com/broxus/tycho/tree/master/light-node).
+A set of indexers for the Tycho network built on top of the Tycho core.
 
 ## System Requirements
 
-System requirements depend on the current network load. We recommend using validator hardware requirements:
+System requirements depend on the current network load. We recommend using
+validator hardware requirements:
 
 - 16 cores \ 32 threads CPU
 - 128 GB RAM
@@ -28,10 +28,14 @@ To start `tycho-indexer`, run the following command:
 
 ### Command Line Options
 
-- `--config` — path to the node configuration file (examples can be found in the README of individual indexers)
-- `--global-config` — path to the global network configuration (obtained from the network you want to sync with)
-- `--import-zerostate` — path to the zerostate file to import (obtained from the network you want to sync with)
-- `--keys` — path to the node keys file (automatically generated on first start if it doesn't exist)
+- `--config` — path to the node configuration file (examples can be found in the
+  README of individual indexers)
+- `--global-config` — path to the global network configuration (obtained from
+  the network you want to sync with)
+- `--import-zerostate` — path to the zerostate file to import (obtained from the
+  network you want to sync with)
+- `--keys` — path to the node keys file (automatically generated on first start
+  if it doesn't exist)
 - `--logger-config` — path to the logging configuration
 
 ## Updating

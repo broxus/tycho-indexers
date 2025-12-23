@@ -1,18 +1,14 @@
 [package]
 name = "archives-downloader"
-version = "0.3.0+tychov-6d2f73ea"
+version = "0.3.0+tychov-837e8086"
 edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
 tikv-jemallocator = { workspace = true }
-
-tycho-core = { workspace = true, features = ["s3"] }
-tycho-light-node = { workspace = true, features = ["s3"] }
-tycho-util = { workspace = true }
+tycho-core-bridge = { workspace = true, features = ["s3"] }
+tycho-core = { workspace = true, features = ["cli"] }
 
 [lints]
 workspace = true

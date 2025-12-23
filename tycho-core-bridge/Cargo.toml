@@ -1,0 +1,19 @@
+[package]
+name = "tycho-core-bridge"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+tycho-core = { workspace = true, features = ["cli"] }
+tycho-rpc = { workspace = true }
+tycho-types = { workspace = true }
+tycho-util = { workspace = true, features = ["cli"] }
+
+[features]
+s3 = ["tycho-core/s3"]
+
+[lints]
+workspace = true

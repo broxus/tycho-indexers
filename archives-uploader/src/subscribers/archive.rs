@@ -6,8 +6,8 @@ use object_store::{ObjectStore, WriteMultipart};
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 use tycho_core::block_strider::{ArchiveSubscriber, ArchiveSubscriberContext};
-use tycho_core::s3::S3Client;
 use tycho_core::storage::CoreStorage;
+use tycho_core_bridge::S3Client;
 use tycho_util::metrics::HistogramGuard;
 use tycho_util::sync::CancellationFlag;
 
