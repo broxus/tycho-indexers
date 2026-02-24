@@ -200,7 +200,7 @@ impl BlockSubscriber for KafkaProducer {
 }
 
 pub enum OptionalStateSubscriber {
-    KafkaProducer(KafkaProducer),
+    KafkaProducer(Box<KafkaProducer>),
     Blackhole,
 }
 
@@ -212,7 +212,7 @@ impl BlockSubscriber for OptionalStateSubscriber {
     fn prepare_block<'a>(&'a self, cx: &'a BlockSubscriberContext) -> Self::PrepareBlockFut<'a> {
         match self {
             OptionalStateSubscriber::KafkaProducer(producer) => {
-                producer.handle_block(&cx.block).boxed()
+                KafkaProducer::handle_block(producer, &cx.block).boxed()
             }
             OptionalStateSubscriber::Blackhole => futures_util::future::ok(()).boxed(),
         }

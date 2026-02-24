@@ -2,7 +2,7 @@ use anyhow::Context;
 use clap::Parser;
 use tycho_core::block_strider::{
     ArchiveBlockProvider, ArchiveHandler, BlockProviderExt, BlockchainBlockProvider, ColdBootType,
-    PsSubscriber, ShardStateApplier, StorageBlockProvider,
+    ShardStateApplier, StorageBlockProvider,
 };
 use tycho_util::cli::logger::init_logger;
 use tycho_util::cli::metrics::spawn_allocator_metrics_loop;
@@ -102,8 +102,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state_applier = {
         let storage = node.storage();
-        let ps_subscriber = PsSubscriber::new(storage.clone());
-        ShardStateApplier::new(storage.clone(), (rpc_state.1, ps_subscriber))
+        ShardStateApplier::new(storage.clone(), rpc_state.1)
     };
 
     // State uploader not included in block strider and running separately

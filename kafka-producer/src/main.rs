@@ -1,7 +1,7 @@
 use anyhow::Context;
 use clap::Parser;
 use tycho_core::block_strider::{
-    ArchiveBlockProvider, BlockProviderExt, BlockchainBlockProvider, ColdBootType, PsSubscriber,
+    ArchiveBlockProvider, BlockProviderExt, BlockchainBlockProvider, ColdBootType,
     ShardStateApplier, StorageBlockProvider,
 };
 use tycho_util::cli::logger::init_logger;
@@ -54,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
             let producer = KafkaProducer::new(c.clone())
                 .await
                 .context("failed to create kafka subscriber")?;
-            OptionalStateSubscriber::KafkaProducer(producer)
+            OptionalStateSubscriber::KafkaProducer(Box::new(producer))
         }
     };
 
@@ -93,9 +93,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state_applier = {
         let storage = node.storage();
-        let ps_subscriber = PsSubscriber::new(storage.clone());
-
-        ShardStateApplier::new(storage.clone(), (rpc_state.1, ps_subscriber))
+        ShardStateApplier::new(storage.clone(), rpc_state.1)
     };
 
     node.run(

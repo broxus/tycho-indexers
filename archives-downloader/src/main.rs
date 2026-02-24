@@ -1,7 +1,7 @@
 use anyhow::Context;
 use clap::Parser;
 use tycho_core::block_strider::{
-    ArchiveBlockProvider, ColdBootType, PsSubscriber, ShardStateApplier,
+    ArchiveBlockProvider, ColdBootType, NoopSubscriber, ShardStateApplier,
 };
 use tycho_util::cli::logger::init_logger;
 use tycho_util::cli::metrics::spawn_allocator_metrics_loop;
@@ -64,8 +64,7 @@ async fn main() -> anyhow::Result<()> {
     // Subscribers
     let state_applier = {
         let storage = node.storage();
-        let ps_subscriber = PsSubscriber::new(storage.clone());
-        ShardStateApplier::new(storage.clone(), ps_subscriber)
+        ShardStateApplier::new(storage.clone(), NoopSubscriber)
     };
 
     // Run node
