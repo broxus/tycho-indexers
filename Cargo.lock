@@ -107,7 +107,7 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
 name = "archives-downloader"
-version = "0.3.0+tychov-6d2f73ea"
+version = "0.3.0+tychov-a96d5188"
 dependencies = [
  "anyhow",
  "clap",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "archives-uploader"
-version = "0.3.0+tychov-6d2f73ea"
+version = "0.3.0+tychov-a96d5188"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -366,9 +366,9 @@ dependencies = [
 
 [[package]]
 name = "cassadilia"
-version = "0.4.3"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2772faa425602cbaa408f1ba5a91f3c4ca3b391981f8ee24497514e4eecd2424"
+checksum = "b241c1e0296981e531864393cabeccba83061a6e79e5556cc267eca5cf2f0d92"
 dependencies = [
  "ahash",
  "blake3",
@@ -594,6 +594,15 @@ name = "crossbeam-epoch"
 version = "0.9.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-queue"
+version = "0.3.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f58bbc28f91df819d0aa2a2c00cd19754769c2fad90579b3592b1c9ba7a3115"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1427,7 +1436,7 @@ dependencies = [
 
 [[package]]
 name = "kafka-producer"
-version = "0.2.2+tychov-6d2f73ea"
+version = "0.2.2+tychov-a96d5188"
 dependencies = [
  "anyhow",
  "clap",
@@ -3201,8 +3210,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tycho-block-util"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3220,22 +3229,23 @@ dependencies = [
 
 [[package]]
 name = "tycho-build-info"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "tycho-core"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "ahash",
  "anyhow",
  "arc-swap",
  "async-trait",
  "bitflags",
+ "blake3",
  "bumpalo",
  "bumpalo-herd",
  "bytes",
@@ -3291,17 +3301,15 @@ dependencies = [
 
 [[package]]
 name = "tycho-light-node"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "anyhow",
  "clap",
- "rand",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
- "tycho-block-util",
  "tycho-core",
  "tycho-crypto",
  "tycho-network",
@@ -3313,8 +3321,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-network"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3353,8 +3361,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-rpc"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3380,17 +3388,36 @@ dependencies = [
  "tracing",
  "tycho-block-util",
  "tycho-core",
+ "tycho-rpc-subscriptions",
  "tycho-storage",
  "tycho-types",
  "tycho-util",
  "tycho-vm",
+ "uuid",
  "weedb",
 ]
 
 [[package]]
+name = "tycho-rpc-subscriptions"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
+dependencies = [
+ "bytesize",
+ "crossbeam-queue",
+ "dashmap",
+ "parking_lot",
+ "smallvec",
+ "thiserror 2.0.17",
+ "tracing",
+ "tycho-types",
+ "tycho-util",
+ "uuid",
+]
+
+[[package]]
 name = "tycho-storage"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3412,8 +3439,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-storage-traits"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "bytes",
  "smallvec",
@@ -3422,9 +3449,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-types"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4f5833c3db328b9ec5544de8a2a7ff4a6d8d654d6f58d6ad5bf8b774dccf969"
+checksum = "633abdc8722ef62f5564c464fe78af7fb71645132d28bb83d23f501ddd66ead2"
 dependencies = [
  "ahash",
  "base64",
@@ -3461,8 +3488,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-util"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3495,14 +3522,15 @@ dependencies = [
  "tracing-stackdriver",
  "tracing-subscriber",
  "tycho-util-proc",
+ "walkdir",
  "zstd-safe 7.2.4",
  "zstd-sys",
 ]
 
 [[package]]
 name = "tycho-util-proc"
-version = "0.3.4"
-source = "git+https://github.com/broxus/tycho.git?rev=6d2f73eac85790ff09d91e34c248af8a1f752bd2#6d2f73eac85790ff09d91e34c248af8a1f752bd2"
+version = "0.3.6"
+source = "git+https://github.com/broxus/tycho.git?rev=a96d5188cbdb59f10997bbb7290a1a3e079ceac1#a96d5188cbdb59f10997bbb7290a1a3e079ceac1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3511,9 +3539,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-vm"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "013cf249ea5a32b38050adfc8cbca471da017c0c03292e7462665859638226ac"
+checksum = "b7b4ae1dade385e5fbdca14e0439b1b7b518be19076324669785f4ef04d9e093"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3533,9 +3561,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-vm-proc"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94d448e5c9526dcfdd2d3f63d9e13de2a207e1aadf906ea4d1e61e45f0aeceb3"
+checksum = "e79fcef10732b88d30b15c517bbfa7f7bef240934a27f70261aacff8a8e57b3a"
 dependencies = [
  "darling",
  "proc-macro2",
