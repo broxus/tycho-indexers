@@ -1,4 +1,50 @@
 use serde::{Deserialize, Serialize};
+use tycho_core::node::NodeBaseConfig;
+use tycho_rpc::RpcConfig;
+use tycho_util::cli::config::ThreadPoolConfig;
+use tycho_util::cli::logger::LoggerConfig;
+use tycho_util::cli::metrics::MetricsConfig;
+use tycho_util::config::PartialConfig;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NodeConfig<T> {
+    #[serde(flatten)]
+    pub base: NodeBaseConfig,
+    pub rpc: Option<RpcConfig>,
+    pub metrics: Option<MetricsConfig>,
+    pub threads: ThreadPoolConfig,
+    pub logger_config: LoggerConfig,
+    #[serde(flatten)]
+    pub user_config: T,
+}
+
+impl<T> Default for NodeConfig<T>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Self {
+            base: Default::default(),
+            rpc: Some(Default::default()),
+            metrics: Some(Default::default()),
+            threads: Default::default(),
+            logger_config: Default::default(),
+            user_config: Default::default(),
+        }
+    }
+}
+
+impl<T> PartialConfig for NodeConfig<T>
+where
+    T: Serialize,
+{
+    type Partial = Self;
+
+    fn into_partial(self) -> Self::Partial {
+        self
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct UserConfig {

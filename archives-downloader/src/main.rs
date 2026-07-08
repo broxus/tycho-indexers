@@ -1,10 +1,17 @@
 use anyhow::Context;
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 use tycho_core::block_strider::{
-    ArchiveBlockProvider, ColdBootType, NoopSubscriber, ShardStateApplier,
+    ArchiveBlockProvider, MetricsSubscriber, NoopSubscriber, ShardStateApplier,
 };
-use tycho_util::cli::logger::init_logger;
-use tycho_util::cli::metrics::spawn_allocator_metrics_loop;
+use tycho_core::blockchain_rpc::NoopBroadcastListener;
+use tycho_core::node::{CmdRunArgs, CmdRunStatus, NodeBase, NodeBaseConfig};
+use tycho_rpc::RpcConfig;
+use tycho_util::cli::config::ThreadPoolConfig;
+use tycho_util::cli::logger::{LoggerConfig, init_logger, set_abort_with_tracing};
+use tycho_util::cli::metrics::{MetricsConfig, init_metrics};
+use tycho_util::cli::signal;
+use tycho_util::config::PartialConfig;
 
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
@@ -12,63 +19,107 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[derive(Parser)]
 struct ExplorerArgs {
     #[clap(flatten)]
-    node: tycho_light_node::CmdRun,
+    node: CmdRunArgs,
 }
 
-type Config = tycho_light_node::NodeConfig<()>;
+type Config = NodeConfig<UserConfig>;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    std::panic::set_hook(Box::new(|info| {
-        use std::io::Write;
-        let backtrace = std::backtrace::Backtrace::capture();
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+struct NodeConfig<T> {
+    #[serde(flatten)]
+    base: NodeBaseConfig,
+    rpc: Option<RpcConfig>,
+    metrics: Option<MetricsConfig>,
+    threads: ThreadPoolConfig,
+    logger_config: LoggerConfig,
+    #[serde(flatten)]
+    user_config: T,
+}
 
-        tracing::error!("{info}\n{backtrace}");
-        std::io::stderr().flush().ok();
-        std::io::stdout().flush().ok();
-        std::process::exit(1);
-    }));
+impl<T> Default for NodeConfig<T>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Self {
+            base: Default::default(),
+            rpc: Some(Default::default()),
+            metrics: Some(Default::default()),
+            threads: Default::default(),
+            logger_config: Default::default(),
+            user_config: Default::default(),
+        }
+    }
+}
 
+impl<T> PartialConfig for NodeConfig<T>
+where
+    T: Serialize,
+{
+    type Partial = Self;
+
+    fn into_partial(self) -> Self::Partial {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct UserConfig {}
+
+fn main() -> anyhow::Result<()> {
     let args = ExplorerArgs::parse();
 
-    let config: Config =
-        tycho_light_node::NodeConfig::from_file(args.node.config.as_ref().context("no config")?)?;
+    let node_args = match args.node.init_config_or_run::<Config>()? {
+        CmdRunStatus::Run(args) => args,
+        CmdRunStatus::ConfigCreated => return Ok(()),
+    };
 
-    init_logger(&config.logger_config, args.node.logger_config.clone())?;
+    let config: Config = node_args.load_config()?;
 
-    let import_zerostate = args.node.import_zerostate.clone();
+    init_logger(&config.logger_config, node_args.logger_config.clone())?;
+    set_abort_with_tracing();
 
-    if config.metrics.is_some() {
-        spawn_allocator_metrics_loop();
-    }
+    let threads = config.threads;
 
-    let mut node = args.node.create(config.clone()).await?;
+    threads.init_all_and_run(signal::run_or_terminate(async move {
+        if let Some(metrics) = config.metrics.as_ref() {
+            init_metrics(metrics)?;
+        }
 
-    let init_block_id = {
-        node.init(ColdBootType::LatestPersistent, import_zerostate, false)
+        let keys = node_args.load_keys()?;
+        let global_config = node_args.load_global_config()?;
+        let public_addr = config.base.resolve_public_ip().await?;
+
+        let node = NodeBase::builder(&config.base, &global_config)
+            .init_network(public_addr, &keys.as_secret())?
+            .init_storage()
             .await?
-    };
-    node.update_validator_set(&init_block_id).await?;
+            .init_blockchain_rpc(NoopBroadcastListener, NoopBroadcastListener)?
+            .build()?;
 
-    // Providers
-    let s3_client = node
-        .s3_client()
-        .ok_or(anyhow::anyhow!("s3 client not initialized"))?;
+        let init_block_id = node.init_ext(node_args.make_boot_args()).await?;
+        node.update_validator_set_from_shard_state(&init_block_id)
+            .await?;
 
-    let archive_block_provider = ArchiveBlockProvider::new(
-        s3_client.clone(),
-        node.storage().clone(),
-        config.archive_block_provider.clone(),
-    );
+        // Providers
+        let s3_client = node
+            .s3_client
+            .clone()
+            .context("s3 client not initialized")?;
 
-    // Subscribers
-    let state_applier = {
-        let storage = node.storage();
-        ShardStateApplier::new(storage.clone(), NoopSubscriber)
-    };
+        let archive_block_provider = ArchiveBlockProvider::new(
+            s3_client,
+            node.core_storage.clone(),
+            config.base.archive_block_provider.clone(),
+        );
 
-    // Run node
-    node.run(archive_block_provider, state_applier).await?;
+        // Subscribers
+        let state_applier = ShardStateApplier::new(node.core_storage.clone(), NoopSubscriber);
 
-    Ok(tokio::signal::ctrl_c().await?)
+        let block_strider =
+            node.build_strider(archive_block_provider, (state_applier, MetricsSubscriber));
+
+        block_strider.run().await
+    }))
 }

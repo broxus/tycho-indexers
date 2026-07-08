@@ -10,9 +10,9 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tikv-jemallocator = { workspace = true }
 
-tycho-core = { workspace = true }
+tycho-core = { workspace = true, features = ["cli"] }
 tycho-block-util = { workspace = true }
-tycho-light-node = { workspace = true }
+tycho-rpc = { workspace = true }
 tycho-util = { workspace = true }
 
 tycho-types = { workspace = true }

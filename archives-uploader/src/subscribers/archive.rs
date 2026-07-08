@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use object_store::path::Path;
-use object_store::{ObjectStore, WriteMultipart};
+use object_store::{ObjectStoreExt, WriteMultipart};
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 use tycho_core::block_strider::{ArchiveSubscriber, ArchiveSubscriberContext};
@@ -78,7 +78,7 @@ impl ArchiveUploader {
 
             let storage = cx.storage.clone();
             let s3_client = self.s3_client.clone();
-            let s3_chunk_size = s3_client.chunk_size();
+            let s3_chunk_size = s3_client.chunk_size().get() as usize;
 
             let cancelled = cancelled.clone();
 

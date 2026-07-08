@@ -9,9 +9,10 @@ clap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tikv-jemallocator = { workspace = true }
+serde = { workspace = true }
 
-tycho-core = { workspace = true, features = ["s3"] }
-tycho-light-node = { workspace = true, features = ["s3"] }
+tycho-core = { workspace = true, features = ["cli", "s3"] }
+tycho-rpc = { workspace = true }
 tycho-util = { workspace = true }
 
 [lints]

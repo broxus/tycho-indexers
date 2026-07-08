@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use object_store::{ObjectStore, WriteMultipart};
+use object_store::{ObjectStoreExt, WriteMultipart};
 use tycho_core::s3::S3Client;
 use tycho_core::storage::{CoreStorage, PersistentState};
 use tycho_util::metrics::HistogramGuard;
@@ -114,7 +114,7 @@ impl Inner {
     async fn upload_state_impl(&self, state: PersistentState) -> anyhow::Result<()> {
         let storage = &self.storage;
         let s3_client = self.s3_client.client();
-        let s3_chunk_size = self.s3_client.chunk_size();
+        let s3_chunk_size = self.s3_client.chunk_size().get() as usize;
 
         let block_id = state.block_id();
         let kind = state.kind();
