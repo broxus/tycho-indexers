@@ -127,6 +127,7 @@ fn main() -> anyhow::Result<()> {
                 state_applier,
                 archive_handler,
                 rpc_blocks,
+                node.validator_resolver().clone(),
                 MetricsSubscriber,
             ),
         );

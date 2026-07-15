@@ -90,7 +90,13 @@ fn main() -> anyhow::Result<()> {
 
         let block_strider = node.build_strider(
             archive_block_provider.chain((blockchain_block_provider, storage_block_provider)),
-            (writer, state_applier, rpc_blocks, MetricsSubscriber),
+            (
+                writer,
+                state_applier,
+                rpc_blocks,
+                node.validator_resolver().clone(),
+                MetricsSubscriber,
+            ),
         );
 
         block_strider.run().await
