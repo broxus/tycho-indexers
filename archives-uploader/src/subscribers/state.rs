@@ -1,12 +1,21 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use object_store::{ObjectStoreExt, WriteMultipart};
+use bytes::Bytes;
+use object_store::path::Path;
+use object_store::{ObjectStore, ObjectStoreExt, PutPayload, WriteMultipart};
 use tycho_core::s3::S3Client;
-use tycho_core::storage::{CoreStorage, PersistentState};
+use tycho_core::storage::{
+    CoreStorage, PersistentState, PersistentStateKind, PersistentStateMeta,
+    validate_persistent_state_split_metadata,
+};
 use tycho_util::metrics::HistogramGuard;
 
 use crate::config::UploaderConfig;
+
+mod state_upload_plan;
+
+use state_upload_plan::{StateObjectRole, StateUploadPlan, UploadAction};
 
 pub struct StateUploader {
     inner: Arc<Inner>,
@@ -114,44 +123,145 @@ impl Inner {
     async fn upload_state_impl(&self, state: PersistentState) -> anyhow::Result<()> {
         let storage = &self.storage;
         let s3_client = self.s3_client.client();
-        let s3_chunk_size = self.s3_client.chunk_size().get() as usize;
 
         let block_id = state.block_id();
         let kind = state.kind();
-
-        let location = self.s3_client.make_state_key(block_id, kind);
-
-        if !self.config.enable_duplication {
-            // Check state existence before upload
-            match s3_client.head(&location).await {
-                Ok(meta) => {
-                    tracing::info!(
-                        ?meta,
-                        ?block_id,
-                        ?kind,
-                        "state already exists, skipping upload"
-                    );
-                    return Ok(());
-                }
-                Err(object_store::Error::NotFound { path, .. }) => {
-                    tracing::info!(path, ?block_id, ?kind, "state not found, starting upload");
-                }
-                Err(e) => {
-                    tracing::error!(
-                        ?block_id,
-                        ?kind,
-                        "error checking state existence: {e}, starting upload"
-                    );
-                }
-            }
-        }
-
         let state_info = storage
             .persistent_state_storage()
             .get_state_info(block_id, kind)
             .context("persistent state not found")?;
 
-        let total_size = state_info.size.get();
+        match kind {
+            PersistentStateKind::Shard => {
+                validate_persistent_state_split_metadata(
+                    block_id.shard,
+                    state_info.split_depth,
+                    state_info.parts.iter().map(|part| part.prefix),
+                )?;
+            }
+            PersistentStateKind::Queue => {
+                anyhow::ensure!(
+                    state_info.split_depth == 0,
+                    "unexpected split depth for persistent queue"
+                );
+                anyhow::ensure!(
+                    state_info.parts.is_empty(),
+                    "unexpected parts for persistent queue"
+                );
+            }
+        }
+
+        let main_location = self.s3_client.make_state_key(block_id, kind, None)?;
+        let manifest_location = self.s3_client.make_state_meta_key(block_id);
+        let meta = (!state_info.parts.is_empty()).then(|| {
+            PersistentStateMeta::new(
+                state_info.split_depth,
+                state_info.parts.iter().map(|part| part.prefix).collect(),
+            )
+        });
+        let mut parts = Vec::with_capacity(state_info.parts.len());
+        if let Some(meta) = &meta {
+            for &prefix in &meta.parts {
+                let part = state_info
+                    .parts
+                    .iter()
+                    .find(|part| part.prefix == prefix)
+                    .context("persistent state part is missing from local metadata")?;
+                parts.push((
+                    prefix,
+                    self.s3_client
+                        .make_state_key(block_id, kind, Some(prefix))?,
+                    part.size.get(),
+                ));
+            }
+        }
+        let plan = StateUploadPlan::make(
+            s3_client.as_ref(),
+            (&main_location, state_info.size.get()),
+            &manifest_location,
+            meta.as_ref(),
+            &parts,
+            self.config.enable_duplication,
+        )
+        .await?;
+
+        for ((prefix, action), (_, _, size)) in plan.parts.iter().zip(&parts) {
+            if *action == UploadAction::Upload {
+                self.upload_state_object(
+                    &state,
+                    StateObjectRole::Part(*prefix),
+                    Some(*prefix),
+                    *size,
+                )
+                .await?;
+            }
+        }
+
+        if let (Some(UploadAction::Upload), Some(meta)) = (plan.manifest, meta.as_ref()) {
+            let bytes = meta.to_bytes()?;
+            self.upload_manifest(&manifest_location, &bytes).await?;
+        }
+
+        if plan.main == UploadAction::Upload {
+            self.upload_state_object(&state, StateObjectRole::Main, None, state_info.size.get())
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn upload_manifest(&self, location: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+        let role = StateObjectRole::Manifest;
+        let declared_size = bytes.len() as u64;
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            tracing::info!(%role, declared_size, attempt, "starting state upload");
+            match self
+                .s3_client
+                .client()
+                .put(
+                    location,
+                    PutPayload::from_bytes(Bytes::copy_from_slice(bytes)),
+                )
+                .await
+            {
+                Ok(_) => match verify_uploaded_manifest_bytes(
+                    self.s3_client.client().as_ref(),
+                    location,
+                    bytes,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        tracing::info!(%role, declared_size, attempt, "state manifest upload completed successfully");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        tracing::error!(%role, declared_size, attempt, "failed to verify uploaded state manifest: {e:#}");
+                    }
+                },
+                Err(e) => {
+                    tracing::error!(%role, declared_size, attempt, "failed to upload state manifest: {e:#}");
+                }
+            }
+            tokio::time::sleep(self.config.retry_delay).await;
+        }
+    }
+
+    async fn upload_state_object(
+        &self,
+        state: &PersistentState,
+        role: StateObjectRole,
+        part_prefix: Option<u64>,
+        total_size: u64,
+    ) -> anyhow::Result<()> {
+        let storage = &self.storage;
+        let s3_client = self.s3_client.client();
+        let s3_chunk_size = self.s3_client.chunk_size().get() as usize;
+        let block_id = state.block_id();
+        let kind = state.kind();
+        let location = self.s3_client.make_state_key(block_id, kind, part_prefix)?;
 
         let mut attempts = 0;
 
@@ -160,6 +270,8 @@ impl Inner {
             attempts += 1;
             tracing::info!(
                 attempt = attempts,
+                %role,
+                declared_size = total_size,
                 ?block_id,
                 ?kind,
                 "starting state upload"
@@ -170,6 +282,8 @@ impl Inner {
                 Err(e) => {
                     tracing::error!(
                         attempts,
+                        %role,
+                        declared_size = total_size,
                         ?block_id,
                         ?kind,
                         "failed to initialize multipart upload: {e}"
@@ -195,17 +309,19 @@ impl Inner {
                 // Read chunk from persistent state storage
                 let state_chunk = match storage
                     .persistent_state_storage()
-                    .read_state_part(block_id, offset, kind)
+                    .read_state_chunk(block_id, offset, kind, part_prefix)
                     .await
                 {
                     Some(chunk) => chunk,
                     None => {
                         tracing::error!(
                             attempts,
+                            %role,
+                            declared_size = total_size,
                             ?block_id,
                             ?kind,
                             offset,
-                            "failed to read state part"
+                            "failed to read state chunk"
                         );
                         tokio::time::sleep(self.config.retry_delay).await;
 
@@ -222,6 +338,8 @@ impl Inner {
                     {
                         tracing::error!(
                             attempts,
+                            %role,
+                            declared_size = total_size,
                             ?block_id,
                             ?kind,
                             "failed to acquire upload state capacity: {e}"
@@ -274,12 +392,14 @@ impl Inner {
                         .as_deref()
                         .is_some_and(|tag| tag.trim_matches('"').starts_with(&expected_etag))
                     {
-                        tracing::info!(block_id = ?block_id, ?kind, uploaded, "upload state completed successfully");
+                        tracing::info!(block_id = ?block_id, ?kind, %role, declared_size = total_size, attempts, uploaded, "upload state object completed successfully");
                         break;
                     }
 
                     tracing::error!(
                         attempt = attempts,
+                        %role,
+                        declared_size = total_size,
                         ?block_id,
                         ?kind,
                         expected = expected_etag,
@@ -291,6 +411,8 @@ impl Inner {
                 Err(e) => {
                     tracing::error!(
                         attempts,
+                        %role,
+                        declared_size = total_size,
                         ?block_id,
                         ?kind,
                         "failed to complete state upload: {e:?}"
@@ -302,6 +424,47 @@ impl Inner {
 
         Ok(())
     }
+}
+
+async fn verify_existing_manifest(
+    client: &dyn ObjectStore,
+    location: &Path,
+    expected_meta: &PersistentStateMeta,
+) -> anyhow::Result<()> {
+    let actual_bytes = client
+        .get(location)
+        .await
+        .context("failed to read remote manifest")?
+        .bytes()
+        .await
+        .context("failed to read remote manifest bytes")?;
+    let actual_meta = PersistentStateMeta::from_bytes(&actual_bytes)
+        .context("failed to parse remote manifest")?
+        .context("remote manifest is missing")?;
+    anyhow::ensure!(
+        actual_meta == *expected_meta,
+        "remote manifest does not match the local split metadata"
+    );
+    Ok(())
+}
+
+async fn verify_uploaded_manifest_bytes(
+    client: &dyn ObjectStore,
+    location: &Path,
+    expected_bytes: &[u8],
+) -> anyhow::Result<()> {
+    let actual_bytes = client
+        .get(location)
+        .await
+        .context("failed to read remote manifest")?
+        .bytes()
+        .await
+        .context("failed to read remote manifest bytes")?;
+    anyhow::ensure!(
+        actual_bytes.as_ref() == expected_bytes,
+        "remote manifest bytes do not match the uploaded payload"
+    );
+    Ok(())
 }
 
 pub enum OptionalStateUploader {
