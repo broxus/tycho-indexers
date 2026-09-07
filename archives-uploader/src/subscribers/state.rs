@@ -12,6 +12,7 @@ use tycho_core::storage::{
 use tycho_util::metrics::HistogramGuard;
 
 use crate::config::UploaderConfig;
+use crate::subscribers::helpers::retry;
 
 mod state_upload_plan;
 
@@ -190,7 +191,7 @@ impl Inner {
             &manifest_location,
             meta.as_ref(),
             &parts,
-            self.config.enable_duplication,
+            &self.config,
         )
         .await?;
 
@@ -444,14 +445,23 @@ async fn verify_existing_manifest(
     client: &dyn ObjectStore,
     location: &Path,
     expected_meta: &PersistentStateMeta,
+    retry_delay: std::time::Duration,
 ) -> anyhow::Result<()> {
-    let actual_bytes = client
-        .get(location)
-        .await
-        .context("failed to read remote manifest")?
-        .bytes()
-        .await
-        .context("failed to read remote manifest bytes")?;
+    let actual_bytes = retry(
+        &format!("read remote manifest {location}"),
+        retry_delay,
+        || async {
+            // restart the entire read if fetching the response body fails
+            client
+                .get(location)
+                .await
+                .context("failed to read remote manifest")?
+                .bytes()
+                .await
+                .context("failed to read remote manifest bytes")
+        },
+    )
+    .await;
     let actual_meta = PersistentStateMeta::from_bytes(&actual_bytes)
         .context("failed to parse remote manifest")?
         .context("remote manifest is missing")?;

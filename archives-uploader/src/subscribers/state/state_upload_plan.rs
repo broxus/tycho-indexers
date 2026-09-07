@@ -1,4 +1,5 @@
 use std::fmt;
+use std::time::Duration;
 
 use anyhow::Context;
 use object_store::path::Path;
@@ -8,6 +9,8 @@ use tycho_core::storage::{PersistentStateKind, PersistentStateMeta};
 use super::verify_existing_manifest;
 #[cfg(test)]
 use super::verify_uploaded_manifest_bytes;
+use crate::config::UploaderConfig;
+use crate::subscribers::helpers::retry;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum StateObjectRole {
@@ -49,20 +52,28 @@ impl RemoteObject {
         location: &Path,
         expected_size: Option<u64>,
         role: StateObjectRole,
+        retry_delay: Duration,
     ) -> anyhow::Result<RemoteObject> {
-        match client.head(location).await {
-            Ok(meta) if meta.size == 0 => Ok(RemoteObject::Zero),
-            Ok(meta) => Ok(RemoteObject::Present {
-                size: meta.size,
-                size_match: match expected_size {
-                    Some(expected) if meta.size == expected => SizeMatch::Match,
-                    Some(expected) => SizeMatch::Mismatch { expected, role },
-                    None => SizeMatch::NotChecked,
-                },
-            }),
-            Err(object_store::Error::NotFound { .. }) => Ok(RemoteObject::Missing),
-            Err(e) => Err(e).context(format!("failed to inspect remote {role}")),
-        }
+        Ok(retry(
+            &format!("inspect remote {role} {location}"),
+            retry_delay,
+            || async {
+                match client.head(location).await {
+                    Ok(meta) if meta.size == 0 => Ok(RemoteObject::Zero),
+                    Ok(meta) => Ok(RemoteObject::Present {
+                        size: meta.size,
+                        size_match: match expected_size {
+                            Some(expected) if meta.size == expected => SizeMatch::Match,
+                            Some(expected) => SizeMatch::Mismatch { expected, role },
+                            None => SizeMatch::NotChecked,
+                        },
+                    }),
+                    Err(object_store::Error::NotFound { .. }) => Ok(RemoteObject::Missing),
+                    Err(e) => Err(e).context(format!("failed to inspect remote {role}")),
+                }
+            },
+        )
+        .await)
     }
 
     fn ensure_size_matches(self) -> anyhow::Result<Self> {
@@ -98,8 +109,11 @@ impl StateUploadPlan {
         manifest_location: &Path,
         manifest: Option<&PersistentStateMeta>,
         parts: &[(u64, Path, u64)],
-        enable_duplication: bool,
+        config: &UploaderConfig,
     ) -> anyhow::Result<StateUploadPlan> {
+        let enable_duplication = config.enable_duplication;
+        let retry_delay = config.retry_delay;
+
         let (main_location, main_size) = main;
         let Some(expected_meta) = manifest else {
             // check remote manifest only for the shard state
@@ -109,6 +123,7 @@ impl StateUploadPlan {
                     manifest_location,
                     None,
                     StateObjectRole::Manifest,
+                    retry_delay,
                 )
                 .await?
                 {
@@ -123,6 +138,7 @@ impl StateUploadPlan {
                 main_location,
                 Some(main_size),
                 StateObjectRole::Main,
+                retry_delay,
             )
             .await?
             .ensure_size_matches()?
@@ -139,45 +155,53 @@ impl StateUploadPlan {
             });
         };
 
-        let manifest =
-            match RemoteObject::inspect(client, manifest_location, None, StateObjectRole::Manifest)
+        let manifest = match RemoteObject::inspect(
+            client,
+            manifest_location,
+            None,
+            StateObjectRole::Manifest,
+            retry_delay,
+        )
+        .await?
+        {
+            RemoteObject::Present { .. } => {
+                verify_existing_manifest(client, manifest_location, expected_meta, retry_delay)
+                    .await?;
+                UploadAction::Reuse
+            }
+            RemoteObject::Missing | RemoteObject::Zero => {
+                match RemoteObject::inspect(
+                    client,
+                    main_location,
+                    Some(main_size),
+                    StateObjectRole::Main,
+                    retry_delay,
+                )
                 .await?
-            {
-                RemoteObject::Present { .. } => {
-                    verify_existing_manifest(client, manifest_location, expected_meta).await?;
-                    UploadAction::Reuse
-                }
-                RemoteObject::Missing | RemoteObject::Zero => {
-                    match RemoteObject::inspect(
-                        client,
-                        main_location,
-                        Some(main_size),
-                        StateObjectRole::Main,
-                    )
-                    .await?
-                    .ensure_size_matches()?
-                    {
-                        RemoteObject::Missing | RemoteObject::Zero => {}
-                        RemoteObject::Present { .. } => {
-                            anyhow::bail!("remote legacy main conflicts with local split state")
-                        }
+                .ensure_size_matches()?
+                {
+                    RemoteObject::Missing | RemoteObject::Zero => {}
+                    RemoteObject::Present { .. } => {
+                        anyhow::bail!("remote legacy main conflicts with local split state")
                     }
-                    UploadAction::Upload
                 }
-            };
+                UploadAction::Upload
+            }
+        };
 
         let mut part_actions = Vec::with_capacity(parts.len());
         for (prefix, location, size) in parts {
             let role = StateObjectRole::Part(*prefix);
-            let action = match RemoteObject::inspect(client, location, Some(*size), role)
-                .await?
-                .ensure_size_matches()?
-            {
-                RemoteObject::Present { .. } if !enable_duplication => UploadAction::Reuse,
-                RemoteObject::Missing | RemoteObject::Zero | RemoteObject::Present { .. } => {
-                    UploadAction::Upload
-                }
-            };
+            let action =
+                match RemoteObject::inspect(client, location, Some(*size), role, retry_delay)
+                    .await?
+                    .ensure_size_matches()?
+                {
+                    RemoteObject::Present { .. } if !enable_duplication => UploadAction::Reuse,
+                    RemoteObject::Missing | RemoteObject::Zero | RemoteObject::Present { .. } => {
+                        UploadAction::Upload
+                    }
+                };
             part_actions.push((*prefix, action));
         }
         let main = match RemoteObject::inspect(
@@ -185,6 +209,7 @@ impl StateUploadPlan {
             main_location,
             Some(main_size),
             StateObjectRole::Main,
+            retry_delay,
         )
         .await?
         .ensure_size_matches()?
@@ -230,7 +255,12 @@ mod tests {
                 manifest_location,
                 manifest,
                 parts,
-                enable_duplication,
+                &UploaderConfig {
+                    retry_delay: Duration::ZERO,
+                    max_concurrency: 1,
+                    enable_duplication,
+                    last_archives_to_upload: 0,
+                },
             )
             .await
         }
@@ -430,7 +460,7 @@ mod tests {
 
         // accept semantically equivalent manifest metadata
         put(&store, &manifest, &bytes).await;
-        verify_existing_manifest(&store, &manifest, &meta)
+        verify_existing_manifest(&store, &manifest, &meta, Duration::ZERO)
             .await
             .unwrap();
 
@@ -462,6 +492,12 @@ mod tests {
         let store = InMemory::new();
         let (_, manifest, _) = locations();
         let main = Path::from("queue.boc");
+        let config = UploaderConfig {
+            retry_delay: Duration::ZERO,
+            max_concurrency: 1,
+            enable_duplication: false,
+            last_archives_to_upload: 0,
+        };
 
         // upload a missing queue despite an existing shard manifest
         put(&store, &manifest, &meta().to_bytes().unwrap()).await;
@@ -472,7 +508,7 @@ mod tests {
             &manifest,
             None,
             &[],
-            false,
+            &config,
         )
         .await
         .unwrap();
@@ -489,7 +525,7 @@ mod tests {
             &manifest,
             None,
             &[],
-            false,
+            &config,
         )
         .await
         .unwrap();
@@ -504,7 +540,7 @@ mod tests {
             &manifest,
             None,
             &[],
-            false,
+            &config,
         )
         .await
         .unwrap();
