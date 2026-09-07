@@ -228,40 +228,26 @@ impl Inner {
     async fn upload_manifest(&self, location: &Path, bytes: &[u8]) -> anyhow::Result<()> {
         let role = StateObjectRole::Manifest;
         let declared_size = bytes.len() as u64;
-        let mut attempt = 0;
-        loop {
-            attempt += 1;
-            tracing::info!(%role, declared_size, attempt, "starting state upload");
-            match self
-                .s3_client
+
+        let operation = format!("upload state manifest {location}");
+        retry(&operation, self.config.retry_delay, || async {
+            tracing::info!(%role, declared_size, "starting state upload");
+            self.s3_client
                 .client()
                 .put(
                     location,
                     PutPayload::from_bytes(Bytes::copy_from_slice(bytes)),
                 )
                 .await
-            {
-                Ok(_) => match verify_uploaded_manifest_bytes(
-                    self.s3_client.client().as_ref(),
-                    location,
-                    bytes,
-                )
+                .context("failed to upload state manifest")?;
+            verify_uploaded_manifest_bytes(self.s3_client.client().as_ref(), location, bytes)
                 .await
-                {
-                    Ok(()) => {
-                        tracing::info!(%role, declared_size, attempt, "state manifest upload completed successfully");
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        tracing::error!(%role, declared_size, attempt, "failed to verify uploaded state manifest: {e:#}");
-                    }
-                },
-                Err(e) => {
-                    tracing::error!(%role, declared_size, attempt, "failed to upload state manifest: {e:#}");
-                }
-            }
-            tokio::time::sleep(self.config.retry_delay).await;
-        }
+                .context("failed to verify uploaded state manifest")?;
+            tracing::info!(%role, declared_size, "state manifest upload completed successfully");
+            Ok::<(), anyhow::Error>(())
+        })
+        .await;
+        Ok(())
     }
 
     async fn upload_state_object(
@@ -278,13 +264,10 @@ impl Inner {
         let kind = state.kind();
         let location = self.s3_client.make_state_key(block_id, kind, prefix)?;
 
-        let mut attempts = 0;
-
-        // Block until we successfully upload
-        'upload_loop: loop {
-            attempts += 1;
+        // retry until we successfully upload
+        let operation = format!("upload state object {role} {location}");
+        retry(&operation, self.config.retry_delay, || async {
             tracing::info!(
-                attempt = attempts,
                 %role,
                 declared_size = total_size,
                 ?block_id,
@@ -292,21 +275,10 @@ impl Inner {
                 "starting state upload"
             );
 
-            let upload = match s3_client.put_multipart(&location).await {
-                Ok(upload) => upload,
-                Err(e) => {
-                    tracing::error!(
-                        attempts,
-                        %role,
-                        declared_size = total_size,
-                        ?block_id,
-                        ?kind,
-                        "failed to initialize multipart upload: {e}"
-                    );
-                    tokio::time::sleep(self.config.retry_delay).await;
-                    continue;
-                }
-            };
+            let upload = s3_client
+                .put_multipart(&location)
+                .await
+                .context("failed to initialize multipart upload")?;
 
             // Buffer for MD5 hashes for all chunks
             let mut md5_buffer = vec![];
@@ -322,46 +294,21 @@ impl Inner {
             // Read state in chunks and write to S3
             while offset < total_size {
                 // Read chunk from persistent state storage
-                let state_chunk = match storage
+                let state_chunk = storage
                     .persistent_state_storage()
                     .read_state_chunk(block_id, offset, kind, prefix)
                     .await
-                {
-                    Some(chunk) => chunk,
-                    None => {
-                        tracing::error!(
-                            attempts,
-                            %role,
-                            declared_size = total_size,
-                            ?block_id,
-                            ?kind,
-                            offset,
-                            "failed to read state chunk"
-                        );
-                        tokio::time::sleep(self.config.retry_delay).await;
-
-                        continue 'upload_loop;
-                    }
-                };
+                    .with_context(|| format!("failed to read state chunk at offset {offset}"))?;
 
                 // Process the chunk byte by byte, accumulating into S3 parts
                 let mut chunk_offset = 0;
                 while chunk_offset < state_chunk.len() {
                     // Wait for capacity before starting a new S3 part
-                    if part_len == 0
-                        && let Err(e) = writer.wait_for_capacity(self.config.max_concurrency).await
-                    {
-                        tracing::error!(
-                            attempts,
-                            %role,
-                            declared_size = total_size,
-                            ?block_id,
-                            ?kind,
-                            "failed to acquire upload state capacity: {e}"
-                        );
-                        tokio::time::sleep(self.config.retry_delay).await;
-
-                        continue 'upload_loop;
+                    if part_len == 0 {
+                        writer
+                            .wait_for_capacity(self.config.max_concurrency)
+                            .await
+                            .context("failed to acquire upload state capacity")?;
                     }
 
                     let remaining_in_part = s3_chunk_size - part_len;
@@ -398,44 +345,25 @@ impl Inner {
                 md5_buffer.extend_from_slice(digest.0.as_slice());
             }
 
-            match writer.finish().await {
-                Ok(result) => {
-                    let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
+            let result = writer
+                .finish()
+                .await
+                .context("failed to complete state upload")?;
+            let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
+            
+            anyhow::ensure!(
+                result
+                    .e_tag
+                    .as_deref()
+                    .is_some_and(|tag| tag.trim_matches('"').starts_with(&expected_etag)),
+                "state ETag mismatch detected: expected={expected_etag}, received={:?}",
+                result.e_tag
+            );
 
-                    if result
-                        .e_tag
-                        .as_deref()
-                        .is_some_and(|tag| tag.trim_matches('"').starts_with(&expected_etag))
-                    {
-                        tracing::info!(block_id = ?block_id, ?kind, %role, declared_size = total_size, attempts, uploaded, "upload state object completed successfully");
-                        break;
-                    }
-
-                    tracing::error!(
-                        attempt = attempts,
-                        %role,
-                        declared_size = total_size,
-                        ?block_id,
-                        ?kind,
-                        expected = expected_etag,
-                        received = ?result.e_tag,
-                        "state ETag mismatch detected"
-                    );
-                    tokio::time::sleep(self.config.retry_delay).await;
-                }
-                Err(e) => {
-                    tracing::error!(
-                        attempts,
-                        %role,
-                        declared_size = total_size,
-                        ?block_id,
-                        ?kind,
-                        "failed to complete state upload: {e:?}"
-                    );
-                    tokio::time::sleep(self.config.retry_delay).await;
-                }
-            }
-        }
+            tracing::info!(?block_id, ?kind, %role, declared_size = total_size, uploaded, "upload state object completed successfully");
+            Ok::<(), anyhow::Error>(())
+        })
+        .await;
 
         Ok(())
     }
