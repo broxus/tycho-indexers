@@ -14,7 +14,7 @@ where
         match action().await {
             Ok(value) => return value,
             Err(error) => {
-                tracing::warn!(operation, attempt, %error, "operation failed, retrying");
+                tracing::warn!(operation, attempt, error = %format_args!("{error:#}"), "operation failed, retrying");
                 tokio::time::sleep(delay).await;
             }
         }

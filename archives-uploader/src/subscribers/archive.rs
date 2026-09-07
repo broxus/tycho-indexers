@@ -12,6 +12,7 @@ use tycho_util::metrics::HistogramGuard;
 use tycho_util::sync::CancellationFlag;
 
 use crate::config::UploaderConfig;
+use crate::subscribers::helpers::retry;
 
 pub struct ArchiveUploader {
     config: UploaderConfig,
@@ -114,25 +115,17 @@ impl ArchiveUploader {
                     .get_archive_size(archive_id)?
                     .context("archive not found")?;
 
-                let mut attempts = 0;
+                // retry until we successfully upload
+                // return Ok(Err) on cancel to prevent endless loop
+                let operation = format!("upload archive {location}");
+                retry(&operation, retry_delay, || async {
+                    tracing::info!("starting upload archive");
 
-                // Block until we successfully upload
-                'upload_loop: loop {
-                    attempts += 1;
-                    tracing::info!(attempt = attempts, "starting upload archive");
-
-                    let upload = match s3_client
+                    let upload = s3_client
                         .client()
                         .put_multipart(&Path::from(location.clone()))
                         .await
-                    {
-                        Ok(upload) => upload,
-                        Err(e) => {
-                            tracing::error!(attempts, "failed to initialize multipart upload: {e}");
-                            tokio::time::sleep(retry_delay).await;
-                            continue;
-                        }
-                    };
+                        .context("failed to initialize multipart upload")?;
 
                     // Buffer for MD5 hashes for all S3 parts
                     let mut md5_buffer = vec![];
@@ -147,40 +140,32 @@ impl ArchiveUploader {
 
                     // Read archive in chunks and accumulate into S3 parts
                     while offset < archive_size as u64 {
-                        anyhow::ensure!(!cancelled.check(), "task aborted");
+                        if cancelled.check() {
+                            return Ok(Err(anyhow::anyhow!("task aborted")));
+                        }
 
                         // Read chunk from archive storage
-                        let archive_chunk = match storage
+                        let archive_chunk = storage
                             .block_storage()
                             .get_archive_chunk(archive_id, offset)
                             .await
-                        {
-                            Ok(chunk) => chunk,
-                            Err(e) => {
-                                tracing::error!(
-                                    attempts,
-                                    offset,
-                                    "failed to read archive chunk: {e}"
-                                );
-                                tokio::time::sleep(retry_delay).await;
-
-                                continue 'upload_loop;
-                            }
-                        };
+                            .with_context(|| {
+                                format!("failed to read archive chunk at offset {offset}")
+                            })?;
 
                         // Process the chunk byte by byte, accumulating into S3 parts
                         let mut chunk_offset = 0;
                         while chunk_offset < archive_chunk.len() {
-                            anyhow::ensure!(!cancelled.check(), "task aborted");
+                            if cancelled.check() {
+                                return Ok(Err(anyhow::anyhow!("task aborted")));
+                            }
 
                             // Wait for capacity before starting a new S3 part
-                            if part_len == 0
-                                && let Err(e) = writer.wait_for_capacity(max_concurrency).await
-                            {
-                                tracing::error!(attempts, "failed to acquire upload capacity: {e}");
-                                tokio::time::sleep(retry_delay).await;
-
-                                continue 'upload_loop;
+                            if part_len == 0 {
+                                writer
+                                    .wait_for_capacity(max_concurrency)
+                                    .await
+                                    .context("failed to acquire upload capacity")?;
                             }
 
                             let remaining_in_part = s3_chunk_size - part_len;
@@ -219,42 +204,33 @@ impl ArchiveUploader {
                         md5_buffer.extend_from_slice(digest.0.as_slice());
                     }
 
-                    match writer.finish().await {
-                        Ok(result) => {
-                            let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
+                    let result = writer
+                        .finish()
+                        .await
+                        .context("failed to complete upload archive")?;
+                    let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
 
-                            if result.e_tag.as_deref().is_some_and(|tag| {
-                                tag.trim_matches('"').starts_with(&expected_etag)
-                            }) {
-                                tracing::info!("upload archive completed successfully");
+                    anyhow::ensure!(
+                        result.e_tag.as_deref().is_some_and(|tag| {
+                            tag.trim_matches('"').starts_with(&expected_etag)
+                        }),
+                        "ETag mismatch detected: expected={expected_etag}, received={:?}",
+                        result.e_tag,
+                    );
 
-                                metrics::histogram!("tycho_uploader_archive_size")
-                                    .record(uploaded as f64);
+                    tracing::info!("upload archive completed successfully");
 
-                                break;
-                            }
+                    metrics::histogram!("tycho_uploader_archive_size").record(uploaded as f64);
 
-                            tracing::error!(
-                                attempt = attempts,
-                                expected = expected_etag,
-                                received = ?result.e_tag,
-                                "ETag mismatch detected"
-                            );
-                            tokio::time::sleep(retry_delay).await;
-                        }
-                        Err(e) => {
-                            tracing::error!(attempts, "failed to complete upload archive: {e:?}");
-                            tokio::time::sleep(retry_delay).await;
-                        }
-                    }
-                }
+                    Ok::<Result<()>, anyhow::Error>(Ok(()))
+                })
+                .await?;
 
                 metrics::gauge!("tycho_uploader_last_uploaded_archive_seqno").set(archive_id);
 
                 // Done
                 scopeguard::ScopeGuard::into_inner(guard);
                 tracing::info!(
-                    attempts,
                     elapsed = %humantime::format_duration(histogram.finish()),
                     "finished"
                 );
