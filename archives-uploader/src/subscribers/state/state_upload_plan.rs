@@ -3,7 +3,7 @@ use std::fmt;
 use anyhow::Context;
 use object_store::path::Path;
 use object_store::{ObjectStore, ObjectStoreExt};
-use tycho_core::storage::PersistentStateMeta;
+use tycho_core::storage::{PersistentStateKind, PersistentStateMeta};
 
 use super::verify_existing_manifest;
 #[cfg(test)]
@@ -93,6 +93,7 @@ pub(super) struct StateUploadPlan {
 impl StateUploadPlan {
     pub(super) async fn make(
         client: &dyn ObjectStore,
+        kind: PersistentStateKind,
         main: (&Path, u64),
         manifest_location: &Path,
         manifest: Option<&PersistentStateMeta>,
@@ -101,12 +102,20 @@ impl StateUploadPlan {
     ) -> anyhow::Result<StateUploadPlan> {
         let (main_location, main_size) = main;
         let Some(expected_meta) = manifest else {
-            match RemoteObject::inspect(client, manifest_location, None, StateObjectRole::Manifest)
+            // check remote manifest only for the shard state
+            if kind == PersistentStateKind::Shard {
+                match RemoteObject::inspect(
+                    client,
+                    manifest_location,
+                    None,
+                    StateObjectRole::Manifest,
+                )
                 .await?
-            {
-                RemoteObject::Missing => {}
-                RemoteObject::Zero | RemoteObject::Present { .. } => {
-                    anyhow::bail!("remote manifest conflicts with local single-file state")
+                {
+                    RemoteObject::Missing => {}
+                    RemoteObject::Zero | RemoteObject::Present { .. } => {
+                        anyhow::bail!("remote manifest conflicts with local single-file state")
+                    }
                 }
             }
             let main = match RemoteObject::inspect(
@@ -205,6 +214,28 @@ mod tests {
 
     use super::*;
 
+    impl StateUploadPlan {
+        async fn for_shard(
+            client: &dyn ObjectStore,
+            main: (&Path, u64),
+            manifest_location: &Path,
+            manifest: Option<&PersistentStateMeta>,
+            parts: &[(u64, Path, u64)],
+            enable_duplication: bool,
+        ) -> anyhow::Result<StateUploadPlan> {
+            Self::make(
+                client,
+                PersistentStateKind::Shard,
+                main,
+                manifest_location,
+                manifest,
+                parts,
+                enable_duplication,
+            )
+            .await
+        }
+    }
+
     fn locations() -> (Path, Path, Vec<(u64, Path, u64)>) {
         (
             Path::from("state.boc"),
@@ -247,9 +278,10 @@ mod tests {
         let meta = meta();
 
         // start with no remote objects and plan a canonical complete split bundle
-        let plan = StateUploadPlan::make(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
-            .await
-            .unwrap();
+        let plan =
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
+                .await
+                .unwrap();
 
         assert_eq!(plan.parts, vec![
             (0x2000000000000000, UploadAction::Upload),
@@ -269,9 +301,10 @@ mod tests {
         put(&store, &parts[1].1, b"").await;
 
         // resume only the incomplete objects
-        let plan = StateUploadPlan::make(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
-            .await
-            .unwrap();
+        let plan =
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
+                .await
+                .unwrap();
         assert_eq!(plan.parts, vec![
             (parts[0].0, UploadAction::Reuse),
             (parts[1].0, UploadAction::Upload)
@@ -283,9 +316,10 @@ mod tests {
         put(&store, &main, b"main!").await;
         put(&store, &parts[1].1, b"two!").await;
 
-        let plan = StateUploadPlan::make(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
-            .await
-            .unwrap();
+        let plan =
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
+                .await
+                .unwrap();
         assert_eq!(plan.parts, vec![
             (parts[0].0, UploadAction::Reuse),
             (parts[1].0, UploadAction::Reuse)
@@ -295,7 +329,7 @@ mod tests {
 
         // duplication overrides reuse and schedules every split object again
         let duplicate_plan =
-            StateUploadPlan::make(&store, (&main, 5), &manifest, Some(&meta), &parts, true)
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, Some(&meta), &parts, true)
                 .await
                 .unwrap();
         assert!(
@@ -318,7 +352,7 @@ mod tests {
         // reject a legacy main that conflicts with the local split representation
         put(&store, &main, b"main!").await;
         assert_error_contains(
-            StateUploadPlan::make(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
                 .await
                 .unwrap_err(),
             "remote legacy main conflicts with local split state",
@@ -330,7 +364,7 @@ mod tests {
         malformed[0] = b'!';
         put(&store, &manifest, &malformed).await;
         assert_error_contains(
-            StateUploadPlan::make(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
                 .await
                 .unwrap_err(),
             "failed to parse remote manifest",
@@ -343,14 +377,14 @@ mod tests {
         let (main, manifest, _) = locations();
 
         // plan the first single-file upload when no remote object exists
-        let plan = StateUploadPlan::make(&store, (&main, 5), &manifest, None, &[], false)
+        let plan = StateUploadPlan::for_shard(&store, (&main, 5), &manifest, None, &[], false)
             .await
             .unwrap();
         assert_eq!(plan.main, UploadAction::Upload);
 
         // replace a zero-sized main object as an incomplete upload
         put(&store, &main, b"").await;
-        let plan = StateUploadPlan::make(&store, (&main, 5), &manifest, None, &[], false)
+        let plan = StateUploadPlan::for_shard(&store, (&main, 5), &manifest, None, &[], false)
             .await
             .unwrap();
         assert_eq!(plan.main, UploadAction::Upload);
@@ -358,7 +392,7 @@ mod tests {
         // reject metadata that conflicts with a local single-file representation
         put(&store, &manifest, b"manifest").await;
         assert_error_contains(
-            StateUploadPlan::make(&store, (&main, 5), &manifest, None, &[], false)
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, None, &[], false)
                 .await
                 .unwrap_err(),
             "remote manifest conflicts with local single-file state",
@@ -367,13 +401,14 @@ mod tests {
         // reuse a complete main object unless duplication requests replacement
         let store = InMemory::new();
         put(&store, &main, b"main!").await;
-        let plan = StateUploadPlan::make(&store, (&main, 5), &manifest, None, &[], false)
+        let plan = StateUploadPlan::for_shard(&store, (&main, 5), &manifest, None, &[], false)
             .await
             .unwrap();
         assert_eq!(plan.main, UploadAction::Reuse);
-        let duplicate_plan = StateUploadPlan::make(&store, (&main, 5), &manifest, None, &[], true)
-            .await
-            .unwrap();
+        let duplicate_plan =
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, None, &[], true)
+                .await
+                .unwrap();
         assert_eq!(duplicate_plan.main, UploadAction::Upload);
     }
 
@@ -387,7 +422,7 @@ mod tests {
         // reject a present split part whose size conflicts with local expectations
         put(&store, &parts[0].1, b"wrong").await;
         assert_error_contains(
-            StateUploadPlan::make(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
                 .await
                 .unwrap_err(),
             "remote part(2000000000000000) has unexpected size: expected=3, actual=5",
@@ -404,7 +439,7 @@ mod tests {
         let mismatch_bytes = mismatch.to_bytes().unwrap();
         put(&store, &manifest, &mismatch_bytes).await;
         assert_error_contains(
-            StateUploadPlan::make(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
+            StateUploadPlan::for_shard(&store, (&main, 5), &manifest, Some(&meta), &parts, false)
                 .await
                 .unwrap_err(),
             "remote manifest does not match the local split metadata",
@@ -420,5 +455,59 @@ mod tests {
                 .unwrap_err(),
             "remote manifest bytes do not match the uploaded payload",
         );
+    }
+
+    #[tokio::test]
+    async fn queue_ignores_shard_manifest() {
+        let store = InMemory::new();
+        let (_, manifest, _) = locations();
+        let main = Path::from("queue.boc");
+
+        // upload a missing queue despite an existing shard manifest
+        put(&store, &manifest, &meta().to_bytes().unwrap()).await;
+        let plan = StateUploadPlan::make(
+            &store,
+            PersistentStateKind::Queue,
+            (&main, 5),
+            &manifest,
+            None,
+            &[],
+            false,
+        )
+        .await
+        .unwrap();
+        assert!(plan.parts.is_empty());
+        assert_eq!(plan.manifest, None);
+        assert_eq!(plan.main, UploadAction::Upload);
+
+        // replace an empty queue object
+        put(&store, &main, b"").await;
+        let plan = StateUploadPlan::make(
+            &store,
+            PersistentStateKind::Queue,
+            (&main, 5),
+            &manifest,
+            None,
+            &[],
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(plan.main, UploadAction::Upload);
+
+        // reuse a queue object with the expected size
+        put(&store, &main, b"queue").await;
+        let plan = StateUploadPlan::make(
+            &store,
+            PersistentStateKind::Queue,
+            (&main, 5),
+            &manifest,
+            None,
+            &[],
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(plan.main, UploadAction::Reuse);
     }
 }

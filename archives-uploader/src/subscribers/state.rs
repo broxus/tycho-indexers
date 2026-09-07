@@ -185,6 +185,7 @@ impl Inner {
         }
         let plan = StateUploadPlan::make(
             s3_client.as_ref(),
+            kind,
             (&main_location, state_info.size.get()),
             &manifest_location,
             meta.as_ref(),
