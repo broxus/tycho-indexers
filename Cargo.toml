@@ -24,11 +24,11 @@ tikv-jemallocator = { version = "0.6.0", features = [
 ] }
 metrics = "0.24.2"
 
-tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "090edba8" }
-tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "090edba8" }
-tycho-rpc = { git = "https://github.com/broxus/tycho.git", rev = "090edba8" }
-tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "090edba8" }
-tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "090edba8" }
+tycho-block-util = { git = "https://github.com/broxus/tycho.git", rev = "fa26e321e09b96d5c5754a03bf39bbcbeff491b3" }
+tycho-core = { git = "https://github.com/broxus/tycho.git", rev = "fa26e321e09b96d5c5754a03bf39bbcbeff491b3" }
+tycho-rpc = { git = "https://github.com/broxus/tycho.git", rev = "fa26e321e09b96d5c5754a03bf39bbcbeff491b3" }
+tycho-storage = { git = "https://github.com/broxus/tycho.git", rev = "fa26e321e09b96d5c5754a03bf39bbcbeff491b3" }
+tycho-util = { git = "https://github.com/broxus/tycho.git", rev = "fa26e321e09b96d5c5754a03bf39bbcbeff491b3" }
 
 rayon = "1.10.0"
 serde = { version = "1.0.214", features = ["derive"] }
@@ -66,7 +66,6 @@ filter_map_next = "warn"
 flat_map_option = "warn"
 float_cmp_const = "warn"
 fn_params_excessive_bools = "warn"
-from_iter_instead_of_collect = "warn"
 if_let_mutex = "warn"
 implicit_clone = "warn"
 imprecise_flops = "warn"
