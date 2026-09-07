@@ -105,7 +105,6 @@ fn main() -> anyhow::Result<()> {
 
         let state_applier = ShardStateApplier::new(node.core_storage.clone(), rpc_states);
 
-        // State uploader not included in block strider and running separately
         let mut state_uploader = match &config.user_config.uploader {
             None => {
                 tracing::warn!("Starting without state uploader");
@@ -119,7 +118,6 @@ fn main() -> anyhow::Result<()> {
                 OptionalStateUploader::StateUploader(uploader)
             }
         };
-        state_uploader.run()?;
 
         let block_strider = node.build_strider(
             archive_block_provider.chain((blockchain_block_provider, storage_block_provider)),
@@ -132,11 +130,13 @@ fn main() -> anyhow::Result<()> {
             ),
         );
 
-        let result = signal::run_or_terminate(block_strider.run()).await;
-
-        // Graceful shutdown
-        state_uploader.stop();
-
-        result
+        // run the state uploader alongside the block strider
+        signal::run_or_terminate(async move {
+            tokio::select! {
+                result = state_uploader.run() => result,
+                result = block_strider.run() => result,
+            }
+        })
+        .await
     })
 }

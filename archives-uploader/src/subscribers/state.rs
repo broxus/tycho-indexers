@@ -20,8 +20,6 @@ use state_upload_plan::{StateObjectRole, StateUploadPlan, UploadAction};
 
 pub struct StateUploader {
     inner: Arc<Inner>,
-
-    run_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl StateUploader {
@@ -36,37 +34,17 @@ impl StateUploader {
             s3_client,
         });
 
-        Ok(StateUploader {
-            inner,
-            run_handle: None,
-        })
+        Ok(StateUploader { inner })
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()> {
-        if let Some(handle) = &self.run_handle
-            && !handle.is_finished()
-        {
-            anyhow::bail!("state uploader already running");
-        }
+    pub async fn run(&mut self) -> anyhow::Result<()> {
+        tracing::info!("state uploader started");
 
-        let inner = self.inner.clone();
-        let handle = tokio::spawn(async move {
-            tracing::info!("state uploader started");
-            if let Err(e) = inner.run().await {
-                tracing::error!(%e, "state uploader failed");
-            }
-            tracing::info!("state uploader finished");
-        });
+        self.inner.run().await.context("state uploader failed")?;
 
-        self.run_handle = Some(handle);
+        tracing::info!("state uploader finished");
 
         Ok(())
-    }
-
-    pub fn stop(&mut self) {
-        if let Some(handle) = self.run_handle.take() {
-            handle.abort();
-        }
     }
 }
 
@@ -350,7 +328,7 @@ impl Inner {
                 .await
                 .context("failed to complete state upload")?;
             let expected_etag = hex::encode(md5::compute(&md5_buffer).as_slice());
-            
+
             anyhow::ensure!(
                 result
                     .e_tag
@@ -425,17 +403,10 @@ pub enum OptionalStateUploader {
 }
 
 impl OptionalStateUploader {
-    pub fn run(&mut self) -> anyhow::Result<()> {
+    pub async fn run(&mut self) -> anyhow::Result<()> {
         match self {
-            OptionalStateUploader::StateUploader(uploader) => uploader.run(),
-            OptionalStateUploader::BlackHole => Ok(()),
-        }
-    }
-
-    pub fn stop(&mut self) {
-        match self {
-            OptionalStateUploader::StateUploader(uploader) => uploader.stop(),
-            OptionalStateUploader::BlackHole => {}
+            OptionalStateUploader::StateUploader(uploader) => uploader.run().await,
+            OptionalStateUploader::BlackHole => std::future::pending().await,
         }
     }
 }
