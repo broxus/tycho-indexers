@@ -6,7 +6,7 @@ use object_store::path::Path;
 use object_store::{ObjectStore, ObjectStoreExt, PutPayload, WriteMultipart};
 use tycho_core::s3::S3Client;
 use tycho_core::storage::{
-    CoreStorage, PersistentState, PersistentStateKind, PersistentStateMeta,
+    CoreStorage, PersistentState, PersistentStateKind, PersistentStateMeta, PersistentStatePrefix,
     validate_persistent_state_split_metadata,
 };
 use tycho_util::metrics::HistogramGuard;
@@ -151,9 +151,14 @@ impl Inner {
             }
         }
 
-        let main_location = self.s3_client.make_state_key(block_id, kind, None)?;
+        let root_prefix = if state_info.split_depth == 0 {
+            PersistentStatePrefix::Unsplit
+        } else {
+            PersistentStatePrefix::Split(None)
+        };
+        let main_location = self.s3_client.make_state_key(block_id, kind, root_prefix)?;
         let manifest_location = self.s3_client.make_state_meta_key(block_id);
-        let meta = (!state_info.parts.is_empty()).then(|| {
+        let meta = (state_info.split_depth > 0).then(|| {
             PersistentStateMeta::new(
                 state_info.split_depth,
                 state_info.parts.iter().map(|part| part.prefix).collect(),
@@ -169,8 +174,11 @@ impl Inner {
                     .context("persistent state part is missing from local metadata")?;
                 parts.push((
                     prefix,
-                    self.s3_client
-                        .make_state_key(block_id, kind, Some(prefix))?,
+                    self.s3_client.make_state_key(
+                        block_id,
+                        kind,
+                        PersistentStatePrefix::Split(Some(prefix)),
+                    )?,
                     part.size.get(),
                 ));
             }
@@ -190,7 +198,7 @@ impl Inner {
                 self.upload_state_object(
                     &state,
                     StateObjectRole::Part(*prefix),
-                    Some(*prefix),
+                    PersistentStatePrefix::Split(Some(*prefix)),
                     *size,
                 )
                 .await?;
@@ -203,8 +211,13 @@ impl Inner {
         }
 
         if plan.main == UploadAction::Upload {
-            self.upload_state_object(&state, StateObjectRole::Main, None, state_info.size.get())
-                .await?;
+            self.upload_state_object(
+                &state,
+                StateObjectRole::Main,
+                root_prefix,
+                state_info.size.get(),
+            )
+            .await?;
         }
 
         Ok(())
@@ -253,7 +266,7 @@ impl Inner {
         &self,
         state: &PersistentState,
         role: StateObjectRole,
-        part_prefix: Option<u64>,
+        prefix: PersistentStatePrefix,
         total_size: u64,
     ) -> anyhow::Result<()> {
         let storage = &self.storage;
@@ -261,7 +274,7 @@ impl Inner {
         let s3_chunk_size = self.s3_client.chunk_size().get() as usize;
         let block_id = state.block_id();
         let kind = state.kind();
-        let location = self.s3_client.make_state_key(block_id, kind, part_prefix)?;
+        let location = self.s3_client.make_state_key(block_id, kind, prefix)?;
 
         let mut attempts = 0;
 
@@ -309,7 +322,7 @@ impl Inner {
                 // Read chunk from persistent state storage
                 let state_chunk = match storage
                     .persistent_state_storage()
-                    .read_state_chunk(block_id, offset, kind, part_prefix)
+                    .read_state_chunk(block_id, offset, kind, prefix)
                     .await
                 {
                     Some(chunk) => chunk,
